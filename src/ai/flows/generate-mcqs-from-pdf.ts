@@ -1,3 +1,4 @@
+
 // src/ai/flows/generate-mcqs-from-pdf.ts
 'use server';
 
@@ -48,14 +49,17 @@ const prompt = ai.definePrompt({
   name: 'generateMcqsFromPdfPrompt',
   input: {schema: GenerateMcqsFromPdfInputSchema},
   output: {schema: GenerateMcqsFromPdfOutputSchema},
-  prompt: `You are an examiner creating multiple-choice questions from a PDF document.
+  prompt: `You are an expert examiner tasked with creating a comprehensive set of multiple-choice questions (MCQs) from a PDF document. Your primary goal is to ensure thorough coverage of the entire PDF document.
 
 You will receive the PDF as a data URI and the subject of the PDF.
-Your task is to generate a comprehensive set of MCQs with detailed explanations, so the
-student can thoroughly test their understanding of the material and prepare effectively for exams.
+Your task is to generate a detailed and exhaustive set of MCQs with clear, step-by-step explanations. The purpose of these MCQs is to allow a student to thoroughly test their understanding of all material presented in the PDF and prepare effectively for exams.
 
-Generate as many and as high-quality questions as possible so that through the MCQs a person can understand the whole PDF.
-The solution must be easy to understand, like a teacher is making you understand.
+**Key Requirements:**
+1.  **Comprehensive Coverage:** Generate **at least 5 distinct, high-quality MCQs for each page** of the PDF. The questions should collectively cover all key concepts, definitions, important facts, examples, and any nuanced information present throughout the document.
+2.  **High Quality:** Questions should be clear, unambiguous, and well-formulated. Options should be plausible, with one clearly correct answer.
+3.  **Detailed Explanations:** For each MCQ, provide a detailed explanation for the correct answer. The explanation should be easy to understand, as if a teacher is explaining the concept, and should clarify why the correct option is right and potentially why other options are incorrect.
+
+Strive to generate a sufficient number of questions to make the student feel they have been tested on every significant aspect of the PDF.
 
 Subject: {{{subject}}}
 PDF: {{media url=pdfDataUri}}
@@ -85,3 +89,4 @@ const generateMcqsFromPdfFlow = ai.defineFlow(
     return output!;
   }
 );
+
