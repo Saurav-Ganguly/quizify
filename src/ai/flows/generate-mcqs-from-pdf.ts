@@ -64,7 +64,7 @@ Strive to generate a sufficient number of questions to make the student feel the
 Subject: {{{subject}}}
 PDF: {{media url=pdfDataUri}}
 
-Output MCQs in the following JSON format:
+Output MCQs in the following JSON format. **Crucially, ensure that every MCQ object in the \`mcqs\` array is complete and contains all required fields: \`question\`, \`options\`, \`correctAnswerIndex\`, and \`explanation\`. Do not omit any of these fields for any question.**
 {
   "mcqs": [
     {
