@@ -64,7 +64,7 @@ The ultimate goal is to produce a comprehensive quiz that allows a student to be
 Subject: {{{subject}}}
 PDF: {{media url=pdfDataUri}}
 
-Output MCQs in the following JSON format. **Crucially, ensure that every MCQ object in the \`mcqs\` array is complete and contains all required fields: \`question\`, \`options\`, \`correctAnswerIndex\`, and \`explanation\`. Do not omit any of these fields for any question.**
+Output MCQs in the following JSON format. **Your entire response MUST be a single, valid JSON object matching this structure. Critically, ensure that EVERY MCQ object within the \`mcqs\` array is COMPLETE and contains ALL FOUR required fields: \`question\` (as a string), \`options\` (as an array of strings), \`correctAnswerIndex\` (as a number), and \`explanation\` (as a string). Do not omit any of these fields for any question, and ensure the data types are correct as specified.**
 {
   "mcqs": [
     {
