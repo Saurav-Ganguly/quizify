@@ -55,11 +55,11 @@ You will receive the PDF as a data URI and the subject of the PDF.
 Your task is to generate a detailed and exhaustive set of MCQs with clear, step-by-step explanations. The purpose of these MCQs is to allow a student to thoroughly test their understanding of all material presented in the PDF and prepare effectively for exams.
 
 **Key Requirements:**
-1.  **Comprehensive Coverage:** Generate **at least 5 distinct, high-quality MCQs for each page** of the PDF. The questions should collectively cover all key concepts, definitions, important facts, examples, and any nuanced information present throughout the document.
+1.  **Mandatory & Exhaustive Coverage:** You **MUST** generate **a minimum of 5 distinct, high-quality MCQs for EACH AND EVERY PAGE** of the provided PDF document. This is a strict and critical requirement. For example, if the PDF has 10 pages, your output **MUST** contain at least 50 MCQs. If it has 77 pages, it must contain at least 385 MCQs. The questions should collectively ensure exhaustive coverage of ALL key concepts, definitions, important facts, examples, and any nuanced information present throughout the ENTIRE document. Do not miss any significant information from any page.
 2.  **High Quality:** Questions should be clear, unambiguous, and well-formulated. Options should be plausible, with one clearly correct answer.
 3.  **Detailed Explanations:** For each MCQ, provide a detailed explanation for the correct answer. The explanation should be easy to understand, as if a teacher is explaining the concept, and should clarify why the correct option is right and potentially why other options are incorrect.
 
-Strive to generate a sufficient number of questions to make the student feel they have been tested on every significant aspect of the PDF.
+The ultimate goal is to produce a comprehensive quiz that allows a student to be thoroughly tested on every significant aspect of the PDF. Ensure your response is complete and contains all generated MCQs, even if the total number is very large. Do not truncate your output or omit any questions.
 
 Subject: {{{subject}}}
 PDF: {{media url=pdfDataUri}}
