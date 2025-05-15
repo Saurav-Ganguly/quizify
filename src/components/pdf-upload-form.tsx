@@ -16,6 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useToast } from '@/hooks/use-toast';
 import { saveQuiz } from '@/lib/quiz-store';
 import { Loader2, UploadCloud } from 'lucide-react';
+import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
   subject: z.string().min(3, { message: "Subject must be at least 3 characters." }).max(100),
@@ -179,3 +180,4 @@ export function PdfUploadForm() {
     </Card>
   );
 }
+
