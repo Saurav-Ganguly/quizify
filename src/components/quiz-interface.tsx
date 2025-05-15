@@ -1,16 +1,16 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { Mcq, Quiz, QuizAttempt } from '@/lib/types';
 import { saveQuizAttempt } from '@/lib/quiz-store';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { CheckCircle, XCircle, Lightbulb, ChevronLeft, ChevronRight, Send } from 'lucide-react';
+import { CheckCircle, XCircle, Lightbulb, ChevronLeft, ChevronRight, Send, Loader2 } from 'lucide-react';
 import { QuizResultSummary } from './quiz-result-summary';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from "@/lib/utils";
@@ -41,6 +41,7 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
   );
   const [quizFinished, setQuizFinished] = useState(!!initialAttempt);
   const [finalAttempt, setFinalAttempt] = useState<QuizAttempt | undefined>(initialAttempt);
+  const [isSubmitting, setIsSubmitting] = useState(false); // For saveQuizAttempt loading state
 
   const currentMcq = quiz.mcqs[currentQuestionIndex];
 
@@ -51,7 +52,7 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
 
 
   const handleOptionSelect = (optionIndex: number) => {
-    if (isSubmitted[currentQuestionIndex]) return; // Don't allow changing after submission for this question
+    if (isSubmitted[currentQuestionIndex] || isSubmitting) return; 
     
     const newSelectedAnswers = [...selectedAnswers];
     newSelectedAnswers[currentQuestionIndex] = optionIndex;
@@ -83,23 +84,33 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
     }
   };
 
-  const finishQuiz = (finalAnswers: (number | null)[], finalStatuses: AnswerStatus[]) => {
-    const score = finalStatuses.filter(status => status === 'correct').length;
-    const attempt = saveQuizAttempt(quiz.id, finalAnswers, score, quiz.mcqs.length);
-    setFinalAttempt(attempt);
-    setQuizFinished(true);
-    toast({
-      title: "Quiz Finished!",
-      description: `You scored ${score} out of ${quiz.mcqs.length}.`,
-    });
+  const finishQuiz = async (finalAnswers: (number | null)[], finalStatuses: AnswerStatus[]) => {
+    setIsSubmitting(true);
+    try {
+      const score = finalStatuses.filter(status => status === 'correct').length;
+      const attempt = await saveQuizAttempt(quiz.id, finalAnswers, score, quiz.mcqs.length);
+      setFinalAttempt(attempt);
+      setQuizFinished(true);
+      toast({
+        title: "Quiz Finished!",
+        description: `You scored ${score} out of ${quiz.mcqs.length}.`,
+      });
+    } catch (error) {
+      console.error("Error saving quiz attempt:", error);
+      toast({
+        title: "Error",
+        description: "Could not save your quiz attempt. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleNextQuestion = () => {
     if (currentQuestionIndex < quiz.mcqs.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
     } else {
-      // This case should be handled by finishQuiz if all are submitted
-      // Or, if navigating after quiz finish, it's just for review
       if (!quizFinished && isSubmitted.every(s => s === true)) {
          finishQuiz(selectedAnswers, answerStatuses);
       }
@@ -146,7 +157,7 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
           <RadioGroup
             value={selectedAnswers[currentQuestionIndex]?.toString()}
             onValueChange={(value) => handleOptionSelect(parseInt(value))}
-            disabled={questionSubmitted}
+            disabled={questionSubmitted || isSubmitting}
             className="space-y-3"
           >
             {currentMcq.options.map((option, index) => {
@@ -167,10 +178,10 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
                     "flex items-center space-x-3 p-4 border rounded-md cursor-pointer hover:bg-muted/50 transition-colors",
                     itemStyle,
                     selectedAnswers[currentQuestionIndex] === index && !questionSubmitted ? "border-primary bg-primary/10" : "",
-                    questionSubmitted ? "cursor-default" : ""
+                    questionSubmitted || isSubmitting ? "cursor-default" : ""
                   )}
                 >
-                  <RadioGroupItem value={index.toString()} id={`option-${index}`} disabled={questionSubmitted}/>
+                  <RadioGroupItem value={index.toString()} id={`option-${index}`} disabled={questionSubmitted || isSubmitting}/>
                   <span>{option}</span>
                   {questionSubmitted && index === currentMcq.correctAnswerIndex && <CheckCircle className="ml-auto h-5 w-5 text-green-600" />}
                   {questionSubmitted && index === selectedAnswers[currentQuestionIndex] && index !== currentMcq.correctAnswerIndex && <XCircle className="ml-auto h-5 w-5 text-red-600" />}
@@ -195,23 +206,33 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
           <Button
             variant="outline"
             onClick={handlePrevQuestion}
-            disabled={currentQuestionIndex === 0}
+            disabled={currentQuestionIndex === 0 || isSubmitting}
           >
             <ChevronLeft className="mr-2 h-4 w-4" /> Previous
           </Button>
           
           {!questionSubmitted ? (
-            <Button onClick={handleSubmitAnswer} disabled={selectedAnswers[currentQuestionIndex] === null}>
-              Submit Answer <Send className="ml-2 h-4 w-4" />
+            <Button onClick={handleSubmitAnswer} disabled={selectedAnswers[currentQuestionIndex] === null || isSubmitting}>
+              {isSubmitting && currentQuestionIndex === quiz.mcqs.length -1 ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              Submit Answer
             </Button>
           ) : (
             currentQuestionIndex < quiz.mcqs.length - 1 ? (
-              <Button onClick={handleNextQuestion}>
+              <Button onClick={handleNextQuestion} disabled={isSubmitting}>
                 Next Question <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             ) : (
-              <Button onClick={() => finishQuiz(selectedAnswers, answerStatuses)}>
-                Finish Quiz <CheckCircle className="ml-2 h-4 w-4" />
+              <Button onClick={() => finishQuiz(selectedAnswers, answerStatuses)} disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                )}
+                Finish Quiz
               </Button>
             )
           )}

@@ -5,7 +5,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { getQuizzes, getQuizAttempts } from '@/lib/quiz-store';
 import type { Quiz, QuizAttempt } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BarChart3, CheckSquare, BookOpen, Percent, TrendingUp, Activity } from 'lucide-react';
+import { BarChart3, CheckSquare, BookOpen, Percent, TrendingUp, Activity, Loader2 } from 'lucide-react';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { ChartConfig, ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 
@@ -20,10 +20,26 @@ interface SubjectProgress {
 export default function ProgressPage() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setQuizzes(getQuizzes());
-    setAttempts(getQuizAttempts());
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const [fetchedQuizzes, fetchedAttempts] = await Promise.all([
+          getQuizzes(),
+          getQuizAttempts()
+        ]);
+        setQuizzes(fetchedQuizzes);
+        setAttempts(fetchedAttempts);
+      } catch (error) {
+        console.error("Failed to fetch progress data:", error);
+        // Optionally, show a toast or error message to the user
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
   const totalQuizzesCreated = quizzes.length;
@@ -67,6 +83,15 @@ export default function ProgressPage() {
     },
   } satisfies ChartConfig;
 
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-lg">Loading progress...</p>
+      </div>
+    );
+  }
+
   if (totalQuizzesCreated === 0 && totalAttemptsMade === 0) {
      return (
       <div className="text-center py-10">
@@ -78,7 +103,6 @@ export default function ProgressPage() {
       </div>
     );
   }
-
 
   return (
     <div className="container mx-auto py-8 space-y-8">
@@ -174,4 +198,3 @@ export default function ProgressPage() {
     </div>
   );
 }
-

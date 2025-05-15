@@ -2,7 +2,7 @@
 "use client";
 
 import type { ChangeEvent } from 'react';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -21,14 +21,9 @@ import { Loader2, UploadCloud, AlertTriangle } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configure PDF.js worker
-// Ensure the worker is correctly sourced. This path might need adjustment based on your build setup.
-// For Next.js, often it's copied to the public directory or served from a CDN.
-// If using a local copy, make sure it's accessible.
 if (typeof window !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 }
-
 
 const formSchema = z.object({
   subject: z.string().min(3, { message: "Subject must be at least 3 characters." }).max(100),
@@ -40,7 +35,7 @@ const formSchema = z.object({
 type PdfUploadFormValues = z.infer<typeof formSchema>;
 
 export function PdfUploadForm() {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // Renamed from isLoading for clarity
   const [fileName, setFileName] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [processingMessage, setProcessingMessage] = useState('');
@@ -71,7 +66,7 @@ export function PdfUploadForm() {
   };
 
   const onSubmit: SubmitHandler<PdfUploadFormValues> = async (data) => {
-    setIsLoading(true);
+    setIsProcessing(true);
     setProcessingMessage('Preparing PDF...');
     setProgress(0);
     setPageErrors([]);
@@ -123,7 +118,7 @@ export function PdfUploadForm() {
 
       setProcessingMessage('Finalizing quiz...');
       if (allMcqs.length > 0) {
-        const newQuiz = saveQuiz(data.subject, allMcqs, pdfFile.name);
+        const newQuiz = await saveQuiz(data.subject, allMcqs, pdfFile.name);
         toast({
           title: "Quiz Generated Successfully!",
           description: `MCQs for "${data.subject}" created with ${allMcqs.length} questions. ${pageErrors.length > 0 ? `${pageErrors.length} page(s) had issues.` : ''}`,
@@ -158,9 +153,8 @@ export function PdfUploadForm() {
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
       setProcessingMessage('');
-      // Keep progress at 100 if successful or if there were partial errors
       if (allMcqs.length === 0 && pageErrors.length === 0) setProgress(0); 
     }
   };
@@ -181,7 +175,7 @@ export function PdfUploadForm() {
                 <FormItem>
                   <FormLabel>Subject</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Quantum Physics" {...field} disabled={isLoading} />
+                    <Input placeholder="e.g., Quantum Physics" {...field} disabled={isProcessing} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -199,7 +193,7 @@ export function PdfUploadForm() {
                       className={cn(
                         "flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50",
                         form.formState.errors.pdfFile ? "border-destructive" : "border-input",
-                        isLoading ? "cursor-not-allowed opacity-70" : ""
+                        isProcessing ? "cursor-not-allowed opacity-70" : ""
                       )}
                     >
                       <div className="flex flex-col items-center justify-center pt-5 pb-6">
@@ -208,8 +202,8 @@ export function PdfUploadForm() {
                           <span className="font-semibold">Click to upload</span> or drag and drop
                         </p>
                         <p className="text-xs text-muted-foreground">PDF only</p>
-                        {fileName && !isLoading && <p className="mt-2 text-sm text-foreground">{fileName}</p>}
-                        {isLoading && processingMessage && <p className="mt-2 text-sm text-primary">{processingMessage}</p>}
+                        {fileName && !isProcessing && <p className="mt-2 text-sm text-foreground">{fileName}</p>}
+                        {isProcessing && processingMessage && <p className="mt-2 text-sm text-primary">{processingMessage}</p>}
                       </div>
                       <Input
                         id="pdfFile"
@@ -217,7 +211,7 @@ export function PdfUploadForm() {
                         className="hidden"
                         accept=".pdf"
                         onChange={handleFileChange}
-                        disabled={isLoading}
+                        disabled={isProcessing}
                       />
                     </Label>
                   </FormControl>
@@ -225,7 +219,7 @@ export function PdfUploadForm() {
                 </FormItem>
               )}
             />
-            {isLoading && (
+            {isProcessing && (
               <div className="space-y-2">
                 <Progress value={progress} className="w-full" />
                 <p className="text-sm text-muted-foreground text-center">
@@ -233,7 +227,7 @@ export function PdfUploadForm() {
                 </p>
               </div>
             )}
-            {pageErrors.length > 0 && !isLoading && (
+            {pageErrors.length > 0 && !isProcessing && (
               <div className="mt-4 p-3 border border-destructive/50 rounded-md bg-destructive/10">
                 <div className="flex items-center gap-2 text-destructive mb-2">
                   <AlertTriangle className="h-5 w-5" />
@@ -246,8 +240,8 @@ export function PdfUploadForm() {
             )}
           </CardContent>
           <CardFooter>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
+            <Button type="submit" className="w-full" disabled={isProcessing}>
+              {isProcessing ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Generating MCQs...

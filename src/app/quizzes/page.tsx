@@ -7,36 +7,71 @@ import type { Quiz, QuizAttempt } from '@/lib/types';
 import { QuizCard } from '@/components/quiz-card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { PlusCircle, FileQuestion } from 'lucide-react';
+import { PlusCircle, FileQuestion, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function QuizzesPage() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [quizAttemptsMap, setQuizAttemptsMap] = useState<Record<string, QuizAttempt | undefined>>({});
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  const loadQuizzesAndAttempts = () => {
-    const storedQuizzes = getQuizzes();
-    setQuizzes(storedQuizzes.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-    const attemptsMap: Record<string, QuizAttempt | undefined> = {};
-    storedQuizzes.forEach(quiz => {
-      attemptsMap[quiz.id] = getLatestAttemptForQuiz(quiz.id);
-    });
-    setQuizAttemptsMap(attemptsMap);
+  const loadQuizzesAndAttempts = async () => {
+    setIsLoading(true);
+    try {
+      const storedQuizzes = await getQuizzes();
+      // Sorting is already handled by Firestore query if 'createdAt' is a Timestamp
+      // If 'createdAt' is string, sort here:
+      // setQuizzes(storedQuizzes.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      setQuizzes(storedQuizzes);
+
+      const attemptsMap: Record<string, QuizAttempt | undefined> = {};
+      for (const quiz of storedQuizzes) {
+        attemptsMap[quiz.id] = await getLatestAttemptForQuiz(quiz.id);
+      }
+      setQuizAttemptsMap(attemptsMap);
+    } catch (error) {
+      console.error("Failed to load quizzes and attempts:", error);
+      toast({
+        title: "Error",
+        description: "Could not load your quizzes. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   useEffect(() => {
     loadQuizzesAndAttempts();
   }, []);
 
-  const handleDeleteQuiz = (quizId: string) => {
-    deleteQuiz(quizId);
-    loadQuizzesAndAttempts(); // Refresh the list
-    toast({
-      title: "Quiz Deleted",
-      description: "The quiz and its attempts have been removed.",
-    });
+  const handleDeleteQuiz = async (quizId: string) => {
+    try {
+      await deleteQuiz(quizId);
+      await loadQuizzesAndAttempts(); // Refresh the list
+      toast({
+        title: "Quiz Deleted",
+        description: "The quiz and its attempts have been removed.",
+      });
+    } catch (error) {
+      console.error("Failed to delete quiz:", error);
+      toast({
+        title: "Error",
+        description: "Could not delete the quiz. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-lg">Loading quizzes...</p>
+      </div>
+    );
+  }
 
   if (quizzes.length === 0) {
     return (
