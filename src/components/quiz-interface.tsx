@@ -13,6 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CheckCircle, XCircle, Lightbulb, ChevronLeft, ChevronRight, Send } from 'lucide-react';
 import { QuizResultSummary } from './quiz-result-summary';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from "@/lib/utils";
 
 interface QuizInterfaceProps {
   quiz: Quiz;
