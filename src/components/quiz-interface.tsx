@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import type { Mcq, Quiz, QuizAttempt } from '@/lib/types';
 import { saveQuizAttempt } from '@/lib/quiz-store';
 import { Button } from '@/components/ui/button';
@@ -10,10 +10,11 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { CheckCircle, XCircle, Lightbulb, ChevronLeft, ChevronRight, Send, Loader2 } from 'lucide-react';
+import { CheckCircle, XCircle, Lightbulb, ChevronLeft, ChevronRight, Send, Loader2, Sparkles } from 'lucide-react';
 import { QuizResultSummary } from './quiz-result-summary';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from "@/lib/utils";
+import { elaborateMcqExplanation, type ElaborateMcqExplanationInput } from '@/ai/flows/elaborate-mcq-explanation';
 
 interface QuizInterfaceProps {
   quiz: Quiz;
@@ -41,23 +42,49 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
   );
   const [quizFinished, setQuizFinished] = useState(!!initialAttempt);
   const [finalAttempt, setFinalAttempt] = useState<QuizAttempt | undefined>(initialAttempt);
-  const [isSubmitting, setIsSubmitting] = useState(false); // For saveQuizAttempt loading state
+  const [isSubmittingQuiz, setIsSubmittingQuiz] = useState(false);
+
+  const [elaboratedExplanations, setElaboratedExplanations] = useState<Record<number, string | undefined>>({});
+  const [isElaborating, setIsElaborating] = useState<Record<number, boolean>>({});
 
   const currentMcq = quiz.mcqs[currentQuestionIndex];
 
   const progressPercentage = useMemo(() => {
     const answeredCount = selectedAnswers.filter(ans => ans !== null).length;
-    return (answeredCount / quiz.mcqs.length) * 100;
+    return (quiz.mcqs.length > 0 ? (answeredCount / quiz.mcqs.length) * 100 : 0);
   }, [selectedAnswers, quiz.mcqs.length]);
 
 
   const handleOptionSelect = (optionIndex: number) => {
-    if (isSubmitted[currentQuestionIndex] || isSubmitting) return; 
+    if (isSubmitted[currentQuestionIndex] || isSubmittingQuiz || isElaborating[currentQuestionIndex]) return; 
     
     const newSelectedAnswers = [...selectedAnswers];
     newSelectedAnswers[currentQuestionIndex] = optionIndex;
     setSelectedAnswers(newSelectedAnswers);
   };
+
+  const finishQuiz = useCallback(async (finalAnswers: (number | null)[], finalStatuses: AnswerStatus[]) => {
+    setIsSubmittingQuiz(true);
+    try {
+      const score = finalStatuses.filter(status => status === 'correct').length;
+      const attempt = await saveQuizAttempt(quiz.id, finalAnswers, score, quiz.mcqs.length);
+      setFinalAttempt(attempt);
+      setQuizFinished(true);
+      toast({
+        title: "Quiz Finished!",
+        description: `You scored ${score} out of ${quiz.mcqs.length}.`,
+      });
+    } catch (error) {
+      console.error("Error saving quiz attempt:", error);
+      toast({
+        title: "Error",
+        description: "Could not save your quiz attempt. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingQuiz(false);
+    }
+  }, [quiz.id, quiz.mcqs.length, toast]);
 
   const handleSubmitAnswer = () => {
     if (selectedAnswers[currentQuestionIndex] === null) {
@@ -80,30 +107,7 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
 
     // If all questions are submitted, finish the quiz
     if (newIsSubmitted.every(s => s === true)) {
-      finishQuiz(newSelectedAnswers, newAnswerStatuses);
-    }
-  };
-
-  const finishQuiz = async (finalAnswers: (number | null)[], finalStatuses: AnswerStatus[]) => {
-    setIsSubmitting(true);
-    try {
-      const score = finalStatuses.filter(status => status === 'correct').length;
-      const attempt = await saveQuizAttempt(quiz.id, finalAnswers, score, quiz.mcqs.length);
-      setFinalAttempt(attempt);
-      setQuizFinished(true);
-      toast({
-        title: "Quiz Finished!",
-        description: `You scored ${score} out of ${quiz.mcqs.length}.`,
-      });
-    } catch (error) {
-      console.error("Error saving quiz attempt:", error);
-      toast({
-        title: "Error",
-        description: "Could not save your quiz attempt. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmitting(false);
+      finishQuiz(selectedAnswers, newAnswerStatuses);
     }
   };
 
@@ -130,7 +134,40 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
     setIsSubmitted(Array(quiz.mcqs.length).fill(false));
     setQuizFinished(false);
     setFinalAttempt(undefined);
+    setElaboratedExplanations({});
+    setIsElaborating({});
   };
+
+  const handleElaborateExplanation = async () => {
+    if (!currentMcq || isElaborating[currentQuestionIndex]) return;
+
+    setIsElaborating(prev => ({ ...prev, [currentQuestionIndex]: true }));
+    try {
+      const input: ElaborateMcqExplanationInput = {
+        subject: quiz.subject,
+        question: currentMcq.question,
+        options: currentMcq.options,
+        correctAnswerIndex: currentMcq.correctAnswerIndex,
+        currentExplanation: currentMcq.explanation,
+      };
+      const result = await elaborateMcqExplanation(input);
+      setElaboratedExplanations(prev => ({ ...prev, [currentQuestionIndex]: result.elaboratedExplanation }));
+      toast({
+        title: "Explanation Elaborated",
+        description: "A more detailed explanation has been generated.",
+      });
+    } catch (error) {
+      console.error("Error elaborating explanation:", error);
+      toast({
+        title: "Elaboration Failed",
+        description: "Could not generate a more detailed explanation. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsElaborating(prev => ({ ...prev, [currentQuestionIndex]: false }));
+    }
+  };
+
 
   if (quizFinished && finalAttempt) {
     return <QuizResultSummary quiz={quiz} attempt={finalAttempt} onRetake={handleRetakeQuiz} />;
@@ -138,6 +175,7 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
 
   const questionSubmitted = isSubmitted[currentQuestionIndex];
   const currentStatus = answerStatuses[currentQuestionIndex];
+  const displayExplanation = elaboratedExplanations[currentQuestionIndex] || currentMcq?.explanation;
 
   return (
     <div className="w-full max-w-3xl mx-auto">
@@ -152,15 +190,15 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
           <Progress value={progressPercentage} className="w-full h-2" />
         </CardHeader>
         <CardContent className="space-y-6">
-          <p className="text-lg font-semibold">{currentMcq.question}</p>
+          <p className="text-lg font-semibold">{currentMcq?.question}</p>
           
           <RadioGroup
             value={selectedAnswers[currentQuestionIndex]?.toString()}
             onValueChange={(value) => handleOptionSelect(parseInt(value))}
-            disabled={questionSubmitted || isSubmitting}
+            disabled={questionSubmitted || isSubmittingQuiz || isElaborating[currentQuestionIndex]}
             className="space-y-3"
           >
-            {currentMcq.options.map((option, index) => {
+            {currentMcq?.options.map((option, index) => {
               let itemStyle = "";
               if (questionSubmitted) {
                 if (index === currentMcq.correctAnswerIndex) {
@@ -178,10 +216,10 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
                     "flex items-center space-x-3 p-4 border rounded-md cursor-pointer hover:bg-muted/50 transition-colors",
                     itemStyle,
                     selectedAnswers[currentQuestionIndex] === index && !questionSubmitted ? "border-primary bg-primary/10" : "",
-                    questionSubmitted || isSubmitting ? "cursor-default" : ""
+                    questionSubmitted || isSubmittingQuiz || isElaborating[currentQuestionIndex] ? "cursor-default opacity-70" : ""
                   )}
                 >
-                  <RadioGroupItem value={index.toString()} id={`option-${index}`} disabled={questionSubmitted || isSubmitting}/>
+                  <RadioGroupItem value={index.toString()} id={`option-${index}`} disabled={questionSubmitted || isSubmittingQuiz || isElaborating[currentQuestionIndex]}/>
                   <span>{option}</span>
                   {questionSubmitted && index === currentMcq.correctAnswerIndex && <CheckCircle className="ml-auto h-5 w-5 text-green-600" />}
                   {questionSubmitted && index === selectedAnswers[currentQuestionIndex] && index !== currentMcq.correctAnswerIndex && <XCircle className="ml-auto h-5 w-5 text-red-600" />}
@@ -190,15 +228,30 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
             })}
           </RadioGroup>
 
-          {questionSubmitted && (
+          {questionSubmitted && currentMcq && (
             <Alert variant={currentStatus === 'correct' ? 'default' : 'destructive'} className={currentStatus === 'correct' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}>
               <Lightbulb className="h-5 w-5" />
               <AlertTitle>
                 {currentStatus === 'correct' ? 'Correct!' : 'Incorrect.'}
               </AlertTitle>
               <AlertDescription className="prose prose-sm max-w-none">
-                <strong>Explanation:</strong> {currentMcq.explanation}
+                <strong>Explanation:</strong> {displayExplanation}
               </AlertDescription>
+              <div className="mt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleElaborateExplanation}
+                  disabled={isElaborating[currentQuestionIndex] || isSubmittingQuiz}
+                >
+                  {isElaborating[currentQuestionIndex] ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  {elaboratedExplanations[currentQuestionIndex] ? "Re-Elaborate" : "Elaborate Explanation"}
+                </Button>
+              </div>
             </Alert>
           )}
         </CardContent>
@@ -206,28 +259,24 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
           <Button
             variant="outline"
             onClick={handlePrevQuestion}
-            disabled={currentQuestionIndex === 0 || isSubmitting}
+            disabled={currentQuestionIndex === 0 || isSubmittingQuiz || isElaborating[currentQuestionIndex]}
           >
             <ChevronLeft className="mr-2 h-4 w-4" /> Previous
           </Button>
           
           {!questionSubmitted ? (
-            <Button onClick={handleSubmitAnswer} disabled={selectedAnswers[currentQuestionIndex] === null || isSubmitting}>
-              {isSubmitting && currentQuestionIndex === quiz.mcqs.length -1 ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="mr-2 h-4 w-4" />
-              )}
+            <Button onClick={handleSubmitAnswer} disabled={selectedAnswers[currentQuestionIndex] === null || isSubmittingQuiz || isElaborating[currentQuestionIndex]}>
+              <Send className="mr-2 h-4 w-4" />
               Submit Answer
             </Button>
           ) : (
             currentQuestionIndex < quiz.mcqs.length - 1 ? (
-              <Button onClick={handleNextQuestion} disabled={isSubmitting}>
+              <Button onClick={handleNextQuestion} disabled={isSubmittingQuiz || isElaborating[currentQuestionIndex]}>
                 Next Question <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             ) : (
-              <Button onClick={() => finishQuiz(selectedAnswers, answerStatuses)} disabled={isSubmitting}>
-                {isSubmitting ? (
+              <Button onClick={() => finishQuiz(selectedAnswers, answerStatuses)} disabled={isSubmittingQuiz || isElaborating[currentQuestionIndex]}>
+                {isSubmittingQuiz ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <CheckCircle className="mr-2 h-4 w-4" />
