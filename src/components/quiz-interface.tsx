@@ -23,6 +23,76 @@ interface QuizInterfaceProps {
 
 type AnswerStatus = 'unanswered' | 'correct' | 'incorrect';
 
+// Helper function to convert markdown-like text to HTML
+const formatExplanationToHtml = (text: string | undefined): string => {
+  if (!text) return '';
+
+  let processedText = text;
+
+  // 1. Bolding:
+  // Handle **text** (stronger emphasis) first
+  processedText = processedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  // Handle *text* (AI prompt asked for *this* to be bold)
+  // This regex looks for an asterisk, then any character that is NOT an asterisk (to avoid conflict with **),
+  // followed by more non-asterisk characters, and then a closing asterisk.
+  processedText = processedText.replace(/\*([^*]+?)\*/g, '<strong>$1</strong>');
+
+
+  // 2. Paragraphs and Lists:
+  // Normalize newlines and then split into logical blocks (paragraphs or list groups)
+  // A block is separated by one or more blank lines.
+  const blocks = processedText.replace(/\r\n/g, '\n').split(/\n\s*\n/);
+  let htmlOutput = '';
+
+  blocks.forEach(block => {
+    if (!block.trim()) return; // Skip empty blocks
+
+    const lines = block.split('\n');
+    let isUl = false;
+    let isOl = false;
+    
+    // Check the first non-empty line to determine if the block is a list
+    const firstRealLine = lines.find(l => l.trim() !== '');
+    if (firstRealLine) {
+        if (firstRealLine.trim().startsWith('- ') || firstRealLine.trim().startsWith('* ')) {
+            isUl = lines.every(l => l.trim() === '' || l.trim().startsWith('- ') || l.trim().startsWith('* '));
+        } else if (firstRealLine.trim().match(/^\d+\.\s+/)) {
+            isOl = lines.every(l => l.trim() === '' || l.trim().match(/^\d+\.\s+/));
+        }
+    }
+    
+    if (isUl) {
+      htmlOutput += '<ul>';
+      lines.forEach(line => {
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
+          htmlOutput += `<li>${trimmedLine.substring(2)}</li>`;
+        }
+      });
+      htmlOutput += '</ul>';
+    } else if (isOl) {
+      htmlOutput += '<ol>';
+      lines.forEach(line => {
+        const trimmedLine = line.trim();
+        if (trimmedLine.match(/^\d+\.\s+/)) {
+          htmlOutput += `<li>${trimmedLine.replace(/^\d+\.\s+/, '')}</li>`;
+        }
+      });
+      htmlOutput += '</ol>';
+    } else {
+      // Treat as a paragraph block, join lines with <br /> within a single <p>.
+      // Filter out empty lines that were just for spacing within a text block.
+      const paragraphContent = lines.filter(l => l.trim() !== '').join('<br />');
+      if (paragraphContent) {
+        htmlOutput += `<p>${paragraphContent}</p>`;
+      }
+    }
+  });
+
+  return htmlOutput;
+};
+
+
 export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
   const { toast } = useToast();
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -148,7 +218,7 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
         question: currentMcq.question,
         options: currentMcq.options,
         correctAnswerIndex: currentMcq.correctAnswerIndex,
-        currentExplanation: currentMcq.explanation,
+        currentExplanation: elaboratedExplanations[currentQuestionIndex] || currentMcq.explanation, // Use already elaborated if exists
       };
       const result = await elaborateMcqExplanation(input);
       setElaboratedExplanations(prev => ({ ...prev, [currentQuestionIndex]: result.elaboratedExplanation }));
@@ -175,7 +245,9 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
 
   const questionSubmitted = isSubmitted[currentQuestionIndex];
   const currentStatus = answerStatuses[currentQuestionIndex];
-  const displayExplanation = elaboratedExplanations[currentQuestionIndex] || currentMcq?.explanation;
+  const displayExplanationString = elaboratedExplanations[currentQuestionIndex] || currentMcq?.explanation;
+  const explanationHtml = formatExplanationToHtml(displayExplanationString);
+
 
   return (
     <div className="w-full max-w-3xl mx-auto">
@@ -235,7 +307,7 @@ export function QuizInterface({ quiz, initialAttempt }: QuizInterfaceProps) {
                 {currentStatus === 'correct' ? 'Correct!' : 'Incorrect.'}
               </AlertTitle>
               <AlertDescription className="prose prose-sm max-w-none">
-                <strong>Explanation:</strong> {displayExplanation}
+                <div dangerouslySetInnerHTML={{ __html: `<strong>Explanation:</strong> ${explanationHtml}` }} />
               </AlertDescription>
               <div className="mt-3">
                 <Button
