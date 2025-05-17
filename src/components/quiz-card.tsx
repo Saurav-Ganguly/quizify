@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { Quiz, QuizAttempt } from '@/lib/types';
-import { FileText, BookOpen, CalendarDays, Percent, Trash2, RotateCcw, Play } from 'lucide-react';
+import { FileText, BookOpen, CalendarDays, Percent, Trash2, RotateCcw, Play, Eye } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   AlertDialog,
@@ -44,6 +44,12 @@ export function QuizCard({ quiz, latestAttempt, onDelete }: QuizCardProps) {
           <FileText className="w-4 h-4 text-muted-foreground" />
           <span>{quiz.mcqs.length} questions</span>
         </div>
+        {quiz.notes && quiz.notes.length > 5 && (
+           <div className="flex items-center gap-2 text-sm">
+            <StickyNote className="w-4 h-4 text-muted-foreground" />
+            <span>Notes available</span>
+          </div>
+        )}
         {latestAttempt && (
           <div className="flex items-center gap-2 text-sm">
             <Percent className="w-4 h-4 text-muted-foreground" />
@@ -57,8 +63,8 @@ export function QuizCard({ quiz, latestAttempt, onDelete }: QuizCardProps) {
         <div className="flex gap-2">
           <Link href={`/quizzes/${quiz.id}`} passHref>
             <Button variant="default" size="sm">
-              {latestAttempt ? <RotateCcw className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
-              {latestAttempt ? "Retake / Review" : "Start Quiz"}
+              {latestAttempt ? <RotateCcw className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+              {latestAttempt ? "Retake / Review" : "Open"}
             </Button>
           </Link>
         </div>
@@ -88,3 +94,6 @@ export function QuizCard({ quiz, latestAttempt, onDelete }: QuizCardProps) {
     </Card>
   );
 }
+
+// Added StickyNote to imports if it wasn't already there
+import { StickyNote } from 'lucide-react';

@@ -160,15 +160,32 @@ export default function QuizPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="quiz" className="w-full">
+      <Tabs defaultValue="pdf" className="w-full">
         <TabsList className="grid w-full grid-cols-3 mb-6">
-          <TabsTrigger value="quiz"><FileText className="mr-2 h-4 w-4" />Quiz</TabsTrigger>
-          <TabsTrigger value="notes"><StickyNote className="mr-2 h-4 w-4" />Notes</TabsTrigger>
           <TabsTrigger value="pdf"><BookOpen className="mr-2 h-4 w-4" />View PDF</TabsTrigger>
+          <TabsTrigger value="notes"><StickyNote className="mr-2 h-4 w-4" />Notes</TabsTrigger>
+          <TabsTrigger value="quiz"><FileText className="mr-2 h-4 w-4" />Quiz</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="quiz">
-          <QuizInterface quiz={quiz} initialAttempt={latestAttempt === null ? undefined : latestAttempt} />
+        
+        <TabsContent value="pdf">
+          <Card>
+            <CardHeader>
+              <CardTitle>Original PDF Document</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {quiz.pdfDataUri ? (
+                <iframe 
+                  src={quiz.pdfDataUri} 
+                  width="100%" 
+                  height="800px" 
+                  title={quiz.pdfName || "PDF Document"}
+                  className="border rounded-md"
+                />
+              ) : (
+                <p className="text-muted-foreground">PDF document not available for this quiz.</p>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="notes">
@@ -191,26 +208,10 @@ export default function QuizPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="pdf">
-          <Card>
-            <CardHeader>
-              <CardTitle>Original PDF Document</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {quiz.pdfDataUri ? (
-                <iframe 
-                  src={quiz.pdfDataUri} 
-                  width="100%" 
-                  height="800px" 
-                  title={quiz.pdfName || "PDF Document"}
-                  className="border rounded-md"
-                />
-              ) : (
-                <p className="text-muted-foreground">PDF document not available for this quiz.</p>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="quiz">
+          <QuizInterface quiz={quiz} initialAttempt={latestAttempt === null ? undefined : latestAttempt} />
         </TabsContent>
+
       </Tabs>
     </div>
   );
