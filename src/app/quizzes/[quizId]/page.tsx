@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getQuizById, getLatestAttemptForQuiz } from '@/lib/quiz-store';
 import type { Quiz as QuizType, QuizAttempt } from '@/lib/types';
@@ -13,6 +13,66 @@ import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+// Helper function to convert markdown-like text to HTML for notes
+const formatNotesToHtml = (text: string | undefined): string => {
+  if (!text) return '';
+
+  let processedText = text;
+
+  // 1. Bolding:
+  processedText = processedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  processedText = processedText.replace(/\*([^*]+?)\*/g, '<strong>$1</strong>');
+
+
+  // 2. Paragraphs and Lists:
+  const blocks = processedText.replace(/\r\n/g, '\n').split(/\n\s*\n/);
+  let htmlOutput = '';
+
+  blocks.forEach(block => {
+    if (!block.trim()) return;
+
+    const lines = block.split('\n');
+    let isUl = false;
+    let isOl = false;
+    
+    const firstRealLine = lines.find(l => l.trim() !== '');
+    if (firstRealLine) {
+        if (firstRealLine.trim().startsWith('- ') || firstRealLine.trim().startsWith('* ')) {
+            isUl = lines.every(l => l.trim() === '' || l.trim().startsWith('- ') || l.trim().startsWith('* '));
+        } else if (firstRealLine.trim().match(/^\d+\.\s+/)) {
+            isOl = lines.every(l => l.trim() === '' || l.trim().match(/^\d+\.\s+/));
+        }
+    }
+    
+    if (isUl) {
+      htmlOutput += '<ul>';
+      lines.forEach(line => {
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
+          htmlOutput += `<li>${trimmedLine.substring(2)}</li>`;
+        }
+      });
+      htmlOutput += '</ul>';
+    } else if (isOl) {
+      htmlOutput += '<ol>';
+      lines.forEach(line => {
+        const trimmedLine = line.trim();
+        if (trimmedLine.match(/^\d+\.\s+/)) {
+          htmlOutput += `<li>${trimmedLine.replace(/^\d+\.\s+/, '')}</li>`;
+        }
+      });
+      htmlOutput += '</ol>';
+    } else {
+      const paragraphContent = lines.filter(l => l.trim() !== '').join('<br />');
+      if (paragraphContent) {
+        htmlOutput += `<p>${paragraphContent}</p>`;
+      }
+    }
+  });
+
+  return htmlOutput;
+};
 
 
 export default function QuizPage() {
@@ -56,6 +116,13 @@ export default function QuizPage() {
       setQuiz(null); 
     }
   }, [quizId, toast]);
+
+  const notesHtml = useMemo(() => {
+    if (quiz?.notes) {
+      return formatNotesToHtml(quiz.notes);
+    }
+    return '';
+  }, [quiz?.notes]);
 
   if (isLoading || quiz === undefined || (latestAttempt === undefined && quiz !== null) ) {
     return (
@@ -110,11 +177,12 @@ export default function QuizPage() {
               <CardTitle>Generated Notes</CardTitle>
             </CardHeader>
             <CardContent>
-              {quiz.notes && quiz.notes.trim() ? (
+              {notesHtml && notesHtml.trim() ? (
                 <ScrollArea className="h-[600px] w-full rounded-md border p-4">
-                  <div className="prose dark:prose-invert max-w-none whitespace-pre-wrap">
-                    {quiz.notes}
-                  </div>
+                  <div 
+                    className="prose dark:prose-invert max-w-none"
+                    dangerouslySetInnerHTML={{ __html: notesHtml }} 
+                  />
                 </ScrollArea>
               ) : (
                 <p className="text-muted-foreground">No notes available for this quiz.</p>

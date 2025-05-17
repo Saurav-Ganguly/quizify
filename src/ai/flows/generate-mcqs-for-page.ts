@@ -28,7 +28,7 @@ export type GenerateMcqsForPageInput = z.infer<typeof GenerateMcqsForPageInputSc
 
 const GenerateMcqsForPageOutputSchema = z.object({
   mcqs: z.array(McqSchema).describe('The generated multiple-choice questions with explanations for this page.'),
-  pageNotes: z.string().describe('Concise, exam-focused notes for this page, highlighting the most important concepts, definitions, and key takeaways. Aim for 2-5 bullet points or short paragraphs per page. Format for readability, using bullet points or short paragraphs.'),
+  pageNotes: z.string().describe('Concise, exam-focused notes for this page, highlighting the most important concepts, definitions, and key takeaways. Aim for 2-5 bullet points or short paragraphs per page. Format for readability, using bullet points, paragraphs, and bold text for keywords.'),
 });
 export type GenerateMcqsForPageOutput = z.infer<typeof GenerateMcqsForPageOutputSchema>;
 
@@ -71,7 +71,11 @@ TASK 2: Generate Exam-Focused Notes
 In ADDITION to the MCQs, you MUST also generate concise, exam-focused notes for THIS PAGE.
 *   These notes should summarize the **most important concepts, definitions, and key takeaways relevant for an exam** present in the page text.
 *   Aim for **2-5 clear bullet points or short paragraphs** for the notes section.
-*   The notes MUST be **well-formatted for readability**. Use bullet points (e.g., starting lines with '*') or short, distinct paragraphs.
+*   The notes MUST be **well-formatted for readability and engagement**. This means:
+    *   Use **clear paragraphs** to separate distinct ideas or topics.
+    *   Employ **bullet points (e.g., starting lines with '*' or '-') or numbered lists** for key points, lists of information, or important takeaways.
+    *   Use **bold text (e.g., by enclosing in asterisks like *this*)** to highlight crucial terms, keywords, or important phrases within the notes.
+    *   Structure the notes logically, perhaps by topic or concept found on the page.
 
 CRITICAL JSON FORMATTING RULES:
 1.  Your entire response MUST be a single, valid JSON object.
@@ -79,7 +83,7 @@ CRITICAL JSON FORMATTING RULES:
 3.  The value of "mcqs" MUST be an array of MCQ objects.
 4.  EVERY MCQ object within the \`mcqs\` array MUST be COMPLETE and contain ALL FOUR required fields: \`question\` (string), \`options\` (array of 4 strings), \`correctAnswerIndex\` (number, 0-3), and \`explanation\` (string). Ensure the data types are correct as specified and that no field is empty or missing.
 5.  The 'mcqs' array for this page MUST contain exactly 5 such MCQ objects. Do not generate more or less than 5.
-6.  The value of "pageNotes" MUST be a single string containing the exam-focused notes for the page, with formatting (bullet points, paragraphs) embedded within the string.
+6.  The value of "pageNotes" MUST be a single string containing the exam-focused notes for the page, with formatting (bullet points, paragraphs, bold indicators) embedded within the string.
 
 Example of the overall JSON object structure (content will vary based on the provided text):
 {
@@ -92,11 +96,11 @@ Example of the overall JSON object structure (content will vary based on the pro
     }
     // ... (4 more MCQ objects)
   ],
-  "pageNotes": "Key Concept 1: X is defined as... This is important for understanding Y.\\n*   Sub-point A: Relates to Z.\\n*   Sub-point B: Impacts W.\\n\\nKey Concept 2: The process of V involves..."
+  "pageNotes": "*Key Concept 1:* X is defined as... This is important for understanding *Y*.\\n\\nMain Takeaway for Page {{pageNumber}}:\\n- The process of V involves steps A, B, and C.\\n- It's crucial to remember the distinction between X and Z."
 }
 
-VERY IMPORTANT FINAL CHECK: Ensure the last MCQ object in the 'mcqs' array is complete and valid, and that all 5 MCQs are present and correctly formatted. Also ensure the 'pageNotes' field is present and contains the generated notes as a string.
-Focus on high-quality questions, plausible distractors, comprehensive, well-formatted explanations, and concise, exam-relevant notes.
+VERY IMPORTANT FINAL CHECK: Ensure the last MCQ object in the 'mcqs' array is complete and valid, and that all 5 MCQs are present and correctly formatted. Also ensure the 'pageNotes' field is present and contains the generated notes as a string with the requested formatting.
+Focus on high-quality questions, plausible distractors, comprehensive, well-formatted explanations, and concise, well-formatted, exam-relevant notes.
 `,
 });
 
