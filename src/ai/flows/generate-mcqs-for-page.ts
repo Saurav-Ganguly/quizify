@@ -1,9 +1,9 @@
 
 'use server';
 /**
- * @fileOverview Generates multiple-choice questions (MCQs) from the text content of a single PDF page.
+ * @fileOverview Generates multiple-choice questions (MCQs) and exam-focused notes from the text content of a single PDF page.
  *
- * - generateMcqsForPage - A function that handles the MCQ generation for a single page.
+ * - generateMcqsForPage - A function that handles the MCQ and notes generation for a single page.
  * - GenerateMcqsForPageInput - The input type for the generateMcqsForPage function.
  * - GenerateMcqsForPageOutput - The return type for the generateMcqsForPage function.
  */
@@ -28,6 +28,7 @@ export type GenerateMcqsForPageInput = z.infer<typeof GenerateMcqsForPageInputSc
 
 const GenerateMcqsForPageOutputSchema = z.object({
   mcqs: z.array(McqSchema).describe('The generated multiple-choice questions with explanations for this page.'),
+  pageNotes: z.string().describe('Concise, exam-focused notes for this page, highlighting the most important concepts, definitions, and key takeaways. Aim for 2-5 bullet points or short paragraphs per page. Format for readability, using bullet points or short paragraphs.'),
 });
 export type GenerateMcqsForPageOutput = z.infer<typeof GenerateMcqsForPageOutputSchema>;
 
@@ -48,8 +49,10 @@ The text for this page is:
 {{{pageText}}}
 \`\`\`
 
-Your task is to generate exactly 5 high-quality, distinct Multiple-Choice Questions (MCQs) based *exclusively* on the provided text content from THIS PAGE.
+Your tasks are twofold for THIS PAGE:
 
+TASK 1: Generate Multiple-Choice Questions (MCQs)
+Generate exactly 5 high-quality, distinct Multiple-Choice Questions (MCQs) based *exclusively* on the provided text content from THIS PAGE.
 For each MCQ, you MUST provide:
 1.  **A clear and unambiguous question.**
 2.  **Exactly four options:**
@@ -64,22 +67,36 @@ For each MCQ, you MUST provide:
         *   Employ bullet points or numbered lists for sequential information, multiple reasons, or key takeaways (e.g., use '*' or '-' for bullets, '1.', '2.' for numbered lists).
         *   Use **bold text** (e.g., by enclosing in asterisks like *this*) to highlight crucial terms, keywords, or parts of the explanation.
 
+TASK 2: Generate Exam-Focused Notes
+In ADDITION to the MCQs, you MUST also generate concise, exam-focused notes for THIS PAGE.
+*   These notes should summarize the **most important concepts, definitions, and key takeaways relevant for an exam** present in the page text.
+*   Aim for **2-5 clear bullet points or short paragraphs** for the notes section.
+*   The notes MUST be **well-formatted for readability**. Use bullet points (e.g., starting lines with '*') or short, distinct paragraphs.
+
 CRITICAL JSON FORMATTING RULES:
 1.  Your entire response MUST be a single, valid JSON object.
-2.  The JSON object MUST contain a single top-level key: "mcqs".
+2.  The JSON object MUST contain two top-level keys: "mcqs" and "pageNotes".
 3.  The value of "mcqs" MUST be an array of MCQ objects.
 4.  EVERY MCQ object within the \`mcqs\` array MUST be COMPLETE and contain ALL FOUR required fields: \`question\` (string), \`options\` (array of 4 strings), \`correctAnswerIndex\` (number, 0-3), and \`explanation\` (string). Ensure the data types are correct as specified and that no field is empty or missing.
 5.  The 'mcqs' array for this page MUST contain exactly 5 such MCQ objects. Do not generate more or less than 5.
+6.  The value of "pageNotes" MUST be a single string containing the exam-focused notes for the page, with formatting (bullet points, paragraphs) embedded within the string.
 
-Example of ONE MCQ object structure (content will vary based on the provided text):
+Example of the overall JSON object structure (content will vary based on the provided text):
 {
-  "question": "What is the primary function of X according to the text?",
-  "options": ["Plausible Distractor A", "Correct Answer B", "Plausible Distractor C", "Plausible Distractor D"],
-  "correctAnswerIndex": 1,
-  "explanation": "The text states that X's primary function is B because... Let's break this down:\\n\\n*Why B is Correct:*\\n1. Evidence point 1 from the text supporting B.\\n2. Evidence point 2 from the text supporting B.\\n\\n*Why Other Options are Incorrect:*\\n- Option A is incorrect because the text indicates...\\n- Option C, while related, is not the *primary* function described..."
+  "mcqs": [
+    {
+      "question": "What is the primary function of X according to the text?",
+      "options": ["Plausible Distractor A", "Correct Answer B", "Plausible Distractor C", "Plausible Distractor D"],
+      "correctAnswerIndex": 1,
+      "explanation": "The text states that X's primary function is B because... Let's break this down:\\n\\n*Why B is Correct:*\\n1. Evidence point 1 from the text supporting B.\\n2. Evidence point 2 from the text supporting B.\\n\\n*Why Other Options are Incorrect:*\\n- Option A is incorrect because the text indicates...\\n- Option C, while related, is not the *primary* function described..."
+    }
+    // ... (4 more MCQ objects)
+  ],
+  "pageNotes": "Key Concept 1: X is defined as... This is important for understanding Y.\\n*   Sub-point A: Relates to Z.\\n*   Sub-point B: Impacts W.\\n\\nKey Concept 2: The process of V involves..."
 }
 
-VERY IMPORTANT FINAL CHECK: Ensure the last MCQ object in the 'mcqs' array is complete and valid, and that all 5 MCQs are present and correctly formatted as per the schema and instructions above. Focus on high-quality questions, plausible distractors, and comprehensive, well-formatted explanations.
+VERY IMPORTANT FINAL CHECK: Ensure the last MCQ object in the 'mcqs' array is complete and valid, and that all 5 MCQs are present and correctly formatted. Also ensure the 'pageNotes' field is present and contains the generated notes as a string.
+Focus on high-quality questions, plausible distractors, comprehensive, well-formatted explanations, and concise, exam-relevant notes.
 `,
 });
 
@@ -91,15 +108,12 @@ const generateMcqsForPageFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await prompt(input);
-    // Basic validation to ensure we have an array of MCQs, even if empty, to prevent downstream errors.
-    // The schema validation handles the content of the MCQs.
-    if (output && Array.isArray(output.mcqs)) {
+    if (output && Array.isArray(output.mcqs) && typeof output.pageNotes === 'string') {
         return output;
     }
-    // If output is malformed or mcqs is not an array, return an empty mcqs array to satisfy schema.
-    // This helps prevent crashes if the AI returns a completely unexpected structure.
-    // Further error handling might be needed based on how strict we want to be.
-    console.warn('AI output for page generation was malformed, returning empty MCQs for this page.', input);
-    return { mcqs: [] };
+    // Fallback if output is malformed
+    console.warn('AI output for page generation was malformed, returning empty MCQs and notes for this page.', input);
+    return { mcqs: [], pageNotes: '' };
   }
 );
+

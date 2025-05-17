@@ -8,8 +8,12 @@ import type { Quiz as QuizType, QuizAttempt } from '@/lib/types';
 import { QuizInterface } from '@/components/quiz-interface';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, BookOpen, FileText, StickyNote } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
 
 export default function QuizPage() {
   const router = useRouter();
@@ -17,8 +21,8 @@ export default function QuizPage() {
   const quizId = typeof params.quizId === 'string' ? params.quizId : '';
   const { toast } = useToast();
   
-  const [quiz, setQuiz] = useState<QuizType | null | undefined>(undefined); // undefined for loading, null for not found
-  const [latestAttempt, setLatestAttempt] = useState<QuizAttempt | null | undefined>(undefined); // undefined for loading, null for no attempt
+  const [quiz, setQuiz] = useState<QuizType | null | undefined>(undefined); 
+  const [latestAttempt, setLatestAttempt] = useState<QuizAttempt | null | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -30,18 +34,18 @@ export default function QuizPage() {
           setQuiz(foundQuiz || null);
           if (foundQuiz) {
             const attempt = await getLatestAttemptForQuiz(quizId);
-            setLatestAttempt(attempt || null); // null if no attempt, undefined if still loading (covered by main isLoading)
+            setLatestAttempt(attempt || null); 
           } else {
-            setLatestAttempt(null); // No quiz, so no attempt
+            setLatestAttempt(null); 
           }
         } catch (error) {
           console.error("Failed to fetch quiz data:", error);
           toast({
             title: "Error",
-            description: "Could not load the quiz. Please try again.",
+            description: "Could not load the quiz data. Please try again.",
             variant: "destructive",
           });
-          setQuiz(null); // Set to null on error to show "Not Found" or similar
+          setQuiz(null); 
         } finally {
           setIsLoading(false);
         }
@@ -49,15 +53,15 @@ export default function QuizPage() {
       fetchQuizData();
     } else {
       setIsLoading(false);
-      setQuiz(null); // No quizId, so not found
+      setQuiz(null); 
     }
   }, [quizId, toast]);
 
-  if (isLoading || quiz === undefined || latestAttempt === undefined && quiz !== null ) { // quiz !== null ensures we don't show loading if quiz is known to be null
+  if (isLoading || quiz === undefined || (latestAttempt === undefined && quiz !== null) ) {
     return (
       <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-4 text-lg">Loading quiz...</p>
+        <p className="ml-4 text-lg">Loading quiz data...</p>
       </div>
     );
   }
@@ -80,11 +84,67 @@ export default function QuizPage() {
 
   return (
     <div className="container mx-auto py-8">
-      <Button variant="outline" onClick={() => router.back()} className="mb-6">
-        <ArrowLeft className="mr-2 h-4 w-4" /> Back
-      </Button>
-      {/* Pass null if latestAttempt is null, otherwise pass the attempt object */}
-      <QuizInterface quiz={quiz} initialAttempt={latestAttempt === null ? undefined : latestAttempt} />
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold flex items-center gap-2">
+          <BookOpen className="h-8 w-8 text-primary" /> {quiz.subject}
+        </h1>
+        <Button variant="outline" onClick={() => router.push('/quizzes')}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to All Quizzes
+        </Button>
+      </div>
+
+      <Tabs defaultValue="quiz" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsTrigger value="quiz"><FileText className="mr-2 h-4 w-4" />Quiz</TabsTrigger>
+          <TabsTrigger value="notes"><StickyNote className="mr-2 h-4 w-4" />Notes</TabsTrigger>
+          <TabsTrigger value="pdf"><BookOpen className="mr-2 h-4 w-4" />View PDF</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="quiz">
+          <QuizInterface quiz={quiz} initialAttempt={latestAttempt === null ? undefined : latestAttempt} />
+        </TabsContent>
+
+        <TabsContent value="notes">
+          <Card>
+            <CardHeader>
+              <CardTitle>Generated Notes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {quiz.notes && quiz.notes.trim() ? (
+                <ScrollArea className="h-[600px] w-full rounded-md border p-4">
+                  <div className="prose dark:prose-invert max-w-none whitespace-pre-wrap">
+                    {quiz.notes}
+                  </div>
+                </ScrollArea>
+              ) : (
+                <p className="text-muted-foreground">No notes available for this quiz.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="pdf">
+          <Card>
+            <CardHeader>
+              <CardTitle>Original PDF Document</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {quiz.pdfDataUri ? (
+                <iframe 
+                  src={quiz.pdfDataUri} 
+                  width="100%" 
+                  height="800px" 
+                  title={quiz.pdfName || "PDF Document"}
+                  className="border rounded-md"
+                />
+              ) : (
+                <p className="text-muted-foreground">PDF document not available for this quiz.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
+

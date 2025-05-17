@@ -34,7 +34,7 @@ const formSchema = z.object({
 
 type PdfUploadFormValues = z.infer<typeof formSchema>;
 
-const MIN_TEXT_LENGTH_FOR_CONTENT = 400; // Minimum characters for a page to be considered for MCQ generation
+const MIN_TEXT_LENGTH_FOR_CONTENT = 400; 
 const NON_CONTENT_PAGE_TITLES = [
   'table of contents', 'contents', 'index', 'preface', 'foreword',
   'appendix', 'bibliography', 'references', 'glossary',
@@ -44,29 +44,30 @@ const NON_CONTENT_PAGE_TITLES = [
 
 const isLikelyNonContentPage = (text: string, pageNumber: number, totalPages: number): boolean => {
   const lowerText = text.toLowerCase().trim();
-
-  // Check for common non-content page titles, especially if they dominate the page
-  for (const title of NON_CONTENT_PAGE_TITLES) {
-    if (lowerText.startsWith(title) && lowerText.length < title.length + 150) { // Title + a bit of formatting/numbers
-      return true;
-    }
-  }
-
-  // Heuristic: if the page starts with "chapter X" or "part Y" and is very short, it might be a section break page.
-  if (lowerText.match(/^(chapter|part|section)\s+[0-9ivxlcdm]+/i) && lowerText.length < 150) {
-    return true;
-  }
-  
-  // Consider first few and last few pages if they are short and contain keywords
   if (pageNumber <= 5 || pageNumber >= totalPages - 5) {
       if (NON_CONTENT_PAGE_TITLES.some(title => lowerText.includes(title)) && lowerText.length < MIN_TEXT_LENGTH_FOR_CONTENT + 200) {
           return true;
       }
   }
-
+  for (const title of NON_CONTENT_PAGE_TITLES) {
+    if (lowerText.startsWith(title) && lowerText.length < title.length + 150) {
+      return true;
+    }
+  }
+  if (lowerText.match(/^(chapter|part|section)\s+[0-9ivxlcdm]+/i) && lowerText.length < 150) {
+    return true;
+  }
   return false;
 };
 
+const readFileAsDataURL = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
 
 export function PdfUploadForm() {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -108,13 +109,16 @@ export function PdfUploadForm() {
     setFileName(pdfFile.name);
 
     let allMcqs: Mcq[] = [];
+    let allNotes: string[] = [];
     let pagesSkipped = 0;
+    let pdfDataUri: string | null = null;
 
     try {
+      pdfDataUri = await readFileAsDataURL(pdfFile); // Read PDF as Data URI for storage
       const arrayBuffer = await pdfFile.arrayBuffer();
       const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const numPages = pdfDoc.numPages;
-      setProcessingMessage(`Loaded PDF with ${numPages} pages. Starting MCQ generation...`);
+      setProcessingMessage(`Loaded PDF with ${numPages} pages. Starting MCQ & Notes generation...`);
 
       for (let i = 1; i <= numPages; i++) {
         setProcessingMessage(`Processing page ${i} of ${numPages}...`);
@@ -133,7 +137,7 @@ export function PdfUploadForm() {
         const lowerPageTextTrimmed = pageText.toLowerCase().trim();
 
         if (isLikelyNonContentPage(lowerPageTextTrimmed, i, numPages)) {
-          console.warn(`Page ${i} identified as a non-content (e.g., Index, Preface) or structural page. Skipping.`);
+          console.warn(`Page ${i} identified as a non-content/structural page. Skipping.`);
           setPageErrors(prev => [...prev, `Page ${i}: Skipped (likely non-content/structural).`]);
           pagesSkipped++;
           setProgress(((i / numPages) * 100));
@@ -141,15 +145,15 @@ export function PdfUploadForm() {
         }
 
         if (lowerPageTextTrimmed.length < MIN_TEXT_LENGTH_FOR_CONTENT) {
-          console.warn(`Page ${i} has very little text content (${lowerPageTextTrimmed.length} chars). Skipping.`);
-          setPageErrors(prev => [...prev, `Page ${i}: Skipped (too short for MCQs).`]);
+          console.warn(`Page ${i} has very little text content. Skipping.`);
+          setPageErrors(prev => [...prev, `Page ${i}: Skipped (too short for MCQs/Notes).`]);
           pagesSkipped++;
           setProgress(((i / numPages) * 100));
           continue;
         }
 
         const aiInput: GenerateMcqsForPageInput = {
-          pageText, // Send original pageText, not lowercased
+          pageText,
           subject: data.subject,
           pageNumber: i,
           totalPages: numPages,
@@ -160,40 +164,48 @@ export function PdfUploadForm() {
           if (result && result.mcqs && result.mcqs.length > 0) {
             allMcqs.push(...result.mcqs);
           } else {
-            console.warn(`No MCQs generated for page ${i}. AI might have returned empty or malformed output.`);
-            setPageErrors(prev => [...prev, `Page ${i}: No MCQs returned by AI (possibly malformed response).`]);
+            console.warn(`No MCQs generated for page ${i}.`);
+            setPageErrors(prev => [...prev, `Page ${i}: No MCQs returned by AI.`]);
+          }
+          if (result && result.pageNotes) {
+            allNotes.push(`Page ${i}:\n${result.pageNotes}`);
+          } else {
+            console.warn(`No notes generated for page ${i}.`);
+             setPageErrors(prev => [...prev, `Page ${i}: No Notes returned by AI.`]);
           }
         } catch (pageError: any) {
-          console.error(`Error generating MCQs for page ${i}:`, pageError);
+          console.error(`Error generating content for page ${i}:`, pageError);
           setPageErrors(prev => [...prev, `Page ${i}: ${pageError.message || 'AI generation failed'}`]);
         }
         setProgress(((i / numPages) * 100));
       }
 
       setProcessingMessage('Finalizing quiz...');
+      const combinedNotes = allNotes.join('\n\n---\n\n');
+
       if (allMcqs.length > 0) {
-        const newQuiz = await saveQuiz(data.subject, allMcqs, pdfFile.name);
-        let description = `MCQs for "${data.subject}" created with ${allMcqs.length} questions.`;
+        const newQuiz = await saveQuiz(data.subject, allMcqs, pdfFile.name, combinedNotes, pdfDataUri);
+        let description = `Quiz & Notes for "${data.subject}" created. ${allMcqs.length} questions.`;
         if (pagesSkipped > 0) {
-            description += ` ${pagesSkipped} page(s) were skipped (non-content/too short).`;
+            description += ` ${pagesSkipped} page(s) were skipped.`;
         }
-        if (pageErrors.length > pagesSkipped) { // Check for errors beyond just skipped pages
+        if (pageErrors.length > pagesSkipped) {
              description += ` Some other pages also had issues.`;
         }
 
         toast({
-          title: "Quiz Generated Successfully!",
+          title: "Quiz & Notes Generated Successfully!",
           description: description,
           duration: (pageErrors.length > 0 || pagesSkipped > 0) ? 10000 : 5000,
         });
-
+        
         const processingIssues = pageErrors.filter(err => !err.includes("Skipped"));
         if (processingIssues.length > 0) {
           toast({
             title: "Page Processing Issues",
             description: (
               <ul className="list-disc list-inside">
-                {processingIssues.slice(0, 3).map((err, idx) => <li key={idx}>{err}</li>)}
+                {processingIssues.slice(0,3).map((err, idx) => <li key={idx}>{err}</li>)}
                 {processingIssues.length > 3 && <li>And {processingIssues.length-3} more...</li>}
               </ul>
             ),
@@ -205,12 +217,12 @@ export function PdfUploadForm() {
       } else {
         toast({
           title: "Generation Failed",
-          description: "Could not generate any MCQs from the PDF. " + (pageErrors.length > 0 ? `Details: ${pageErrors.map(e => e.split(':')[1] || e).join(', ')}` : "Please try a different PDF or subject."),
+          description: "Could not generate any MCQs from the PDF. "  + (pageErrors.length > 0 ? `Details: ${pageErrors.map(e => e.split(':')[1] || e).join(', ')}` : "Please try a different PDF or subject."),
           variant: "destructive",
         });
       }
     } catch (error: any) {
-      console.error("Error processing PDF or generating MCQs:", error);
+      console.error("Error processing PDF or generating content:", error);
       toast({
         title: "Error",
         description: `An error occurred: ${error.message || String(error)}. Please try again.`,
@@ -226,8 +238,8 @@ export function PdfUploadForm() {
   return (
     <Card className="w-full max-w-lg mx-auto shadow-xl">
       <CardHeader>
-        <CardTitle className="text-2xl">Create New Quiz</CardTitle>
-        <CardDescription>Upload a PDF and enter the subject to generate MCQs page by page.</CardDescription>
+        <CardTitle className="text-2xl">Create New Quiz & Notes</CardTitle>
+        <CardDescription>Upload a PDF to generate MCQs and exam-focused notes page by page.</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -308,10 +320,10 @@ export function PdfUploadForm() {
               {isProcessing ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating MCQs...
+                  Generating Quiz & Notes...
                 </>
               ) : (
-                "Generate Quiz"
+                "Generate Quiz & Notes"
               )}
             </Button>
           </CardFooter>
@@ -320,3 +332,4 @@ export function PdfUploadForm() {
     </Card>
   );
 }
+

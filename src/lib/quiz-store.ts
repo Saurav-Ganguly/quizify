@@ -13,7 +13,7 @@ import {
   limit,
   Timestamp,
   writeBatch,
-  serverTimestamp // Potentially use for createdAt
+  serverTimestamp
 } from 'firebase/firestore';
 import type { Quiz, QuizAttempt, Mcq } from './types';
 
@@ -23,9 +23,13 @@ const ATTEMPTS_COLLECTION = 'attempts';
 // Helper to convert Firestore Timestamps to ISO strings if they exist
 const mapDocToQuiz = (docData: any, id: string): Quiz => {
   return {
-    ...docData,
     id,
+    subject: docData.subject,
+    mcqs: docData.mcqs,
     createdAt: docData.createdAt instanceof Timestamp ? docData.createdAt.toDate().toISOString() : docData.createdAt,
+    pdfName: docData.pdfName,
+    notes: docData.notes,
+    pdfDataUri: docData.pdfDataUri,
   } as Quiz;
 };
 
@@ -65,43 +69,45 @@ export const getQuizById = async (id: string): Promise<Quiz | undefined> => {
   }
 };
 
-export const saveQuiz = async (subject: string, mcqs: Mcq[], pdfName?: string): Promise<Quiz> => {
+export const saveQuiz = async (
+  subject: string, 
+  mcqs: Mcq[], 
+  pdfName?: string, 
+  notes?: string, 
+  pdfDataUri?: string
+): Promise<Quiz> => {
   try {
     const newQuizData = {
       subject,
       mcqs,
       pdfName: pdfName || null,
-      createdAt: serverTimestamp(), // Use server timestamp for creation
+      notes: notes || null,
+      pdfDataUri: pdfDataUri || null,
+      createdAt: serverTimestamp(),
     };
     const docRef = await addDoc(collection(db, QUIZZES_COLLECTION), newQuizData);
     
-    // To return the full quiz object with the server-generated timestamp resolved
-    // We fetch it back. Alternatively, we can construct it optimistically.
-    // For simplicity, let's construct it with a client-side timestamp for immediate return,
-    // knowing the server will store the precise one.
-    // The getQuizzes/getQuizById will fetch the server timestamp.
     return {
       id: docRef.id,
       subject,
       mcqs,
       pdfName,
-      createdAt: new Date().toISOString(), // Client-side timestamp for immediate return
+      notes,
+      pdfDataUri,
+      createdAt: new Date().toISOString(), 
     };
   } catch (error) {
     console.error("Error saving quiz:", error);
-    throw error; // Re-throw to be handled by the caller
+    throw error; 
   }
 };
 
 export const deleteQuiz = async (id: string): Promise<void> => {
   try {
     const batch = writeBatch(db);
-
-    // Delete the quiz document
     const quizDocRef = doc(db, QUIZZES_COLLECTION, id);
     batch.delete(quizDocRef);
 
-    // Delete associated attempts
     const attemptsQuery = query(collection(db, ATTEMPTS_COLLECTION), where('quizId', '==', id));
     const attemptsSnapshot = await getDocs(attemptsQuery);
     attemptsSnapshot.forEach(doc => {
@@ -174,10 +180,9 @@ export const saveQuizAttempt = async (
       answers,
       score,
       totalQuestions,
-      completedAt: serverTimestamp(), // Use server timestamp
+      completedAt: serverTimestamp(),
     };
     const docRef = await addDoc(collection(db, ATTEMPTS_COLLECTION), newAttemptData);
-    // Similar to saveQuiz, returning a client-side timestamp for immediate use.
     return {
       id: docRef.id,
       quizId,
@@ -191,3 +196,4 @@ export const saveQuizAttempt = async (
     throw error;
   }
 };
+

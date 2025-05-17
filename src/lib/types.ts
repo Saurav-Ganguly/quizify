@@ -11,8 +11,9 @@ export type Quiz = {
   subject: string;
   mcqs: Mcq[];
   createdAt: string; // ISO date string
-  // Optional: Store a brief summary or source filename
   pdfName?: string; 
+  notes?: string; // Combined notes from all pages
+  pdfDataUri?: string; // Data URI of the original PDF
 };
 
 export type QuizAttempt = {
@@ -23,3 +24,4 @@ export type QuizAttempt = {
   totalQuestions: number;
   completedAt: string; // ISO date string
 };
+
