@@ -13,7 +13,8 @@ import {
   limit,
   Timestamp,
   writeBatch,
-  serverTimestamp
+  serverTimestamp,
+  updateDoc
 } from 'firebase/firestore';
 import type { Quiz, QuizAttempt, Mcq } from './types';
 
@@ -120,6 +121,8 @@ export const saveQuiz = async (
     };
     const docRef = await addDoc(collection(db, QUIZZES_COLLECTION), newQuizData);
     
+    // For the returned quiz object, we use an ISO string for createdAt for immediate use.
+    // The actual serverTimestamp will be resolved by Firestore.
     return {
       id: docRef.id,
       subject,
@@ -127,11 +130,11 @@ export const saveQuiz = async (
       pdfName,
       notes,
       pdfDataUri,
-      createdAt: new Date().toISOString(), 
+      createdAt: new Date().toISOString(), // Use current date as placeholder until Firestore resolves
     };
   } catch (error) {
     console.error("Error saving quiz:", error);
-    throw error; 
+    throw error; // Re-throw the error to be caught by the calling function
   }
 };
 
@@ -141,6 +144,7 @@ export const deleteQuiz = async (id: string): Promise<void> => {
     const quizDocRef = doc(db, QUIZZES_COLLECTION, id);
     batch.delete(quizDocRef);
 
+    // Query for attempts related to this quiz and delete them
     const attemptsQuery = query(collection(db, ATTEMPTS_COLLECTION), where('quizId', '==', id));
     const attemptsSnapshot = await getDocs(attemptsQuery);
     attemptsSnapshot.forEach(doc => {
@@ -150,6 +154,18 @@ export const deleteQuiz = async (id: string): Promise<void> => {
     await batch.commit();
   } catch (error) {
     console.error("Error deleting quiz and its attempts:", error);
+    throw error;
+  }
+};
+
+export const updateQuizPdfName = async (quizId: string, newPdfName: string): Promise<void> => {
+  try {
+    const quizDocRef = doc(db, QUIZZES_COLLECTION, quizId);
+    await updateDoc(quizDocRef, {
+      pdfName: newPdfName
+    });
+  } catch (error) {
+    console.error("Error updating quiz PDF name:", error);
     throw error;
   }
 };
@@ -222,7 +238,7 @@ export const saveQuizAttempt = async (
       answers,
       score,
       totalQuestions,
-      completedAt: new Date().toISOString(), 
+      completedAt: new Date().toISOString(), // Use current date as placeholder
     };
   } catch (error) {
     console.error("Error saving quiz attempt:", error);

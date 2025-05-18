@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { getQuizzes, getLatestAttemptForQuiz, deleteQuiz } from '@/lib/quiz-store';
+import { getQuizzes, getLatestAttemptForQuiz, deleteQuiz, updateQuizPdfName } from '@/lib/quiz-store';
 import type { Quiz, QuizAttempt } from '@/lib/types';
 import { QuizCard } from '@/components/quiz-card';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,7 @@ export default function QuizzesPage() {
   
   useEffect(() => {
     loadQuizzesAndAttempts();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -83,6 +84,24 @@ export default function QuizzesPage() {
       toast({
         title: "Error",
         description: "Could not delete the quiz. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSavePdfName = async (quizId: string, newName: string) => {
+    try {
+      await updateQuizPdfName(quizId, newName);
+      await loadQuizzesAndAttempts(); // Refresh the list
+      toast({
+        title: "Quiz Name Updated",
+        description: "The quiz name has been successfully updated.",
+      });
+    } catch (error) {
+      console.error("Failed to update quiz name:", error);
+      toast({
+        title: "Error",
+        description: "Could not update the quiz name. Please try again.",
         variant: "destructive",
       });
     }
@@ -148,6 +167,7 @@ export default function QuizzesPage() {
                     quiz={quiz} 
                     latestAttempt={quizAttemptsMap[quiz.id]}
                     onDelete={handleDeleteQuiz}
+                    onSavePdfName={handleSavePdfName}
                   />
                 ))}
               </div>
