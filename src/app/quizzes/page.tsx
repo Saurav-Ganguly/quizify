@@ -1,17 +1,28 @@
 
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { getQuizzes, getLatestAttemptForQuiz, deleteQuiz } from '@/lib/quiz-store';
 import type { Quiz, QuizAttempt } from '@/lib/types';
 import { QuizCard } from '@/components/quiz-card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { PlusCircle, FileQuestion, Loader2 } from 'lucide-react';
+import { PlusCircle, FileQuestion, Loader2, FolderOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+
+interface GroupedQuizzes {
+  [subject: string]: Quiz[];
+}
 
 export default function QuizzesPage() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [groupedQuizzes, setGroupedQuizzes] = useState<GroupedQuizzes>({});
   const [quizAttemptsMap, setQuizAttemptsMap] = useState<Record<string, QuizAttempt | undefined>>({});
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -20,9 +31,6 @@ export default function QuizzesPage() {
     setIsLoading(true);
     try {
       const storedQuizzes = await getQuizzes();
-      // Sorting is already handled by Firestore query if 'createdAt' is a Timestamp
-      // If 'createdAt' is string, sort here:
-      // setQuizzes(storedQuizzes.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
       setQuizzes(storedQuizzes);
 
       const attemptsMap: Record<string, QuizAttempt | undefined> = {};
@@ -46,6 +54,22 @@ export default function QuizzesPage() {
     loadQuizzesAndAttempts();
   }, []);
 
+  useEffect(() => {
+    if (quizzes.length > 0) {
+      const groups: GroupedQuizzes = quizzes.reduce((acc, quiz) => {
+        const subject = quiz.subject || "Uncategorized";
+        if (!acc[subject]) {
+          acc[subject] = [];
+        }
+        acc[subject].push(quiz);
+        return acc;
+      }, {} as GroupedQuizzes);
+      setGroupedQuizzes(groups);
+    } else {
+      setGroupedQuizzes({});
+    }
+  }, [quizzes]);
+
   const handleDeleteQuiz = async (quizId: string) => {
     try {
       await deleteQuiz(quizId);
@@ -63,6 +87,10 @@ export default function QuizzesPage() {
       });
     }
   };
+
+  const sortedSubjects = useMemo(() => {
+    return Object.keys(groupedQuizzes).sort((a, b) => a.localeCompare(b));
+  }, [groupedQuizzes]);
 
   if (isLoading) {
     return (
@@ -101,16 +129,32 @@ export default function QuizzesPage() {
           </Link>
         </Button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {quizzes.map((quiz) => (
-          <QuizCard 
-            key={quiz.id} 
-            quiz={quiz} 
-            latestAttempt={quizAttemptsMap[quiz.id]}
-            onDelete={handleDeleteQuiz}
-          />
+      
+      <Accordion type="multiple" className="w-full space-y-4">
+        {sortedSubjects.map((subject) => (
+          <AccordionItem value={subject} key={subject} className="bg-card border border-border rounded-lg shadow-sm">
+            <AccordionTrigger className="px-6 py-4 hover:no-underline">
+              <div className="flex items-center gap-3">
+                <FolderOpen className="h-6 w-6 text-primary" />
+                <span className="text-xl font-semibold">{subject}</span>
+                <span className="text-sm text-muted-foreground">({groupedQuizzes[subject].length} quiz/zes)</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-6 pb-6 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {groupedQuizzes[subject].map((quiz) => (
+                  <QuizCard 
+                    key={quiz.id} 
+                    quiz={quiz} 
+                    latestAttempt={quizAttemptsMap[quiz.id]}
+                    onDelete={handleDeleteQuiz}
+                  />
+                ))}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
         ))}
-      </div>
+      </Accordion>
     </div>
   );
 }
