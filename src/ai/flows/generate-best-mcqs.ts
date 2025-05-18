@@ -58,13 +58,17 @@ When selecting the "best" MCQs, you MUST adhere to the following criteria:
 6.  **Variety**: If discernible, try to include a mix of question styles or difficulties.
 7.  **Uniqueness**: Avoid selecting duplicate or near-duplicate questions if possible. Prioritize distinct questions.
 
-You MUST return exactly '{{desiredCount}}' MCQs if at least that many are provided, or all MCQs if fewer than '{{desiredCount}}' are provided.
-The output MUST be a JSON object with a single top-level key "selectedMcqs". The value of "selectedMcqs" MUST be an array of MCQ objects.
-Each MCQ object in the "selectedMcqs" array MUST be complete and contain ALL original fields: "question" (string), "options" (array of strings), "correctAnswerIndex" (number), and "explanation" (string).
+CRITICAL JSON FORMATTING RULES:
+1.  Your entire response MUST be a single, valid JSON object.
+2.  The JSON object MUST contain a single top-level key: "selectedMcqs".
+3.  The value of "selectedMcqs" MUST be an array of MCQ objects.
+4.  **VERY IMPORTANT**: EVERY MCQ object within the "selectedMcqs" array MUST be COMPLETE and contain ALL original fields: "question" (string), "options" (array of strings), "correctAnswerIndex" (number), and "explanation" (string). Ensure the data types are correct as specified and that no field is empty or missing for ANY of the selected MCQs. Do not omit any part of any selected MCQ.
+5.  You MUST return exactly '{{desiredCount}}' MCQs if at least that many are provided, or all MCQs if fewer than '{{desiredCount}}' are provided.
 
 Input MCQs (JSON format):
 {{{json allMcqs}}}
 
+VERY IMPORTANT FINAL CHECK: Ensure that the last MCQ object in the 'selectedMcqs' array is complete and valid, and that all selected MCQs are present and correctly formatted with all their original fields ("question", "options", "correctAnswerIndex", "explanation").
 Ensure your response is a single, valid JSON object adhering to the specified output schema.
 `,
 });
@@ -83,7 +87,14 @@ const generateBestMcqsFlow = ai.defineFlow(
     const {output} = await prompt(input);
     if (output && Array.isArray(output.selectedMcqs)) {
       // Ensure we don't return more than desiredCount due to AI misinterpretation
-      return { selectedMcqs: output.selectedMcqs.slice(0, input.desiredCount) };
+      // Also filter out any potentially incomplete MCQs as a safety measure
+      const completeSelectedMcqs = output.selectedMcqs.filter(mcq => 
+        mcq.question && 
+        mcq.options && 
+        mcq.correctAnswerIndex !== undefined && 
+        mcq.explanation
+      );
+      return { selectedMcqs: completeSelectedMcqs.slice(0, input.desiredCount) };
     }
     // Fallback or error handling if AI output is malformed
     console.warn('AI output for best MCQ selection was malformed. Returning a random subset as fallback.', input);
@@ -96,3 +107,4 @@ const generateBestMcqsFlow = ai.defineFlow(
 // Helper to ensure McqType matches McqSchema for type consistency
 const _mcqTypeCheck: McqType = {} as z.infer<typeof McqSchema>;
 const _mcqSchemaCheck: z.infer<typeof McqSchema> = {} as McqType;
+
