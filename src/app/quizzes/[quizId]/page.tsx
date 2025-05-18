@@ -8,7 +8,7 @@ import type { Quiz as QuizType, QuizAttempt, Mcq } from '@/lib/types';
 import { QuizInterface } from '@/components/quiz-interface';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, BookOpen, FileText, StickyNote, Zap, AlertTriangle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Loader2, BookOpen, FileText, StickyNote, Zap, AlertTriangle, RefreshCw, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -92,6 +92,10 @@ export default function QuizPage() {
   const [quickQuizError, setQuickQuizError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("pdf");
 
+  // State for all MCQs for the Quick Quiz tab
+  const [allMcqsForQuickQuiz, setAllMcqsForQuickQuiz] = useState<Mcq[] | null>(null);
+  const [isLoadingAllMcqs, setIsLoadingAllMcqs] = useState(true);
+
 
   useEffect(() => {
     if (quizId) {
@@ -125,6 +129,28 @@ export default function QuizPage() {
     }
   }, [quizId, toast]);
 
+  // Fetch all MCQs once on component mount for the Quick Quiz tab
+  useEffect(() => {
+    const fetchAllMcqsData = async () => {
+      setIsLoadingAllMcqs(true);
+      try {
+        const mcqs = await getAllMcqsFromAllQuizzes();
+        setAllMcqsForQuickQuiz(mcqs);
+      } catch (error) {
+        console.error("Failed to fetch all MCQs for Quick Quiz tab:", error);
+        toast({
+          title: "Error Loading Quick Quiz Data",
+          description: "Could not retrieve all questions for the Quick Quiz feature.",
+          variant: "destructive",
+        });
+        setAllMcqsForQuickQuiz([]); // Set to empty array on error
+      } finally {
+        setIsLoadingAllMcqs(false);
+      }
+    };
+    fetchAllMcqsData();
+  }, [toast]);
+
   const notesHtml = useMemo(() => {
     if (quiz?.notes) {
       return formatNotesToHtml(quiz.notes);
@@ -133,20 +159,23 @@ export default function QuizPage() {
   }, [quiz?.notes]);
 
   const handleGenerateQuickQuiz = useCallback(async () => {
+    if (!allMcqsForQuickQuiz || allMcqsForQuickQuiz.length < QUICK_QUIZ_DESIRED_COUNT) {
+      setQuickQuizError(`Quick Quiz requires at least ${QUICK_QUIZ_DESIRED_COUNT} questions. You have ${allMcqsForQuickQuiz?.length || 0}.`);
+       toast({
+        title: "Quick Quiz Condition Not Met",
+        description: `The AI-powered Quick Quiz needs ${QUICK_QUIZ_DESIRED_COUNT} or more questions. You currently have ${allMcqsForQuickQuiz?.length || 0}.`,
+        variant: "default",
+      });
+      return;
+    }
+
     setIsGeneratingQuickQuiz(true);
     setQuickQuizError(null);
     setQuickQuizData(null);
     try {
-      const allMcqs = await getAllMcqsFromAllQuizzes();
-      if (allMcqs.length === 0) {
-        setQuickQuizError("No questions available in the database to generate a quick quiz.");
-        setIsGeneratingQuickQuiz(false);
-        return;
-      }
-      
-      toast({ title: "Generating Quick Quiz", description: `AI is selecting the best ${Math.min(allMcqs.length, QUICK_QUIZ_DESIRED_COUNT)} questions... This might take a moment.`});
+      toast({ title: "Generating Quick Quiz", description: `AI is selecting the best ${QUICK_QUIZ_DESIRED_COUNT} questions from ${allMcqsForQuickQuiz.length} available... This might take a moment.`});
 
-      const result = await generateBestMcqs({ allMcqs, desiredCount: QUICK_QUIZ_DESIRED_COUNT });
+      const result = await generateBestMcqs({ allMcqs: allMcqsForQuickQuiz, desiredCount: QUICK_QUIZ_DESIRED_COUNT });
       
       if (result.selectedMcqs.length === 0) {
         setQuickQuizError("AI could not select any questions for the Quick Quiz. Please try again.");
@@ -174,7 +203,7 @@ export default function QuizPage() {
     } finally {
       setIsGeneratingQuickQuiz(false);
     }
-  }, [toast]);
+  }, [allMcqsForQuickQuiz, toast]);
 
 
   if (isLoading || quiz === undefined || (latestAttempt === undefined && quiz !== null) ) {
@@ -201,6 +230,77 @@ export default function QuizPage() {
       </div>
     );
   }
+  
+  let quickQuizTabInternalContent;
+  if (isLoadingAllMcqs) {
+    quickQuizTabInternalContent = (
+      <div className="text-center space-y-3">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+        <p className="text-muted-foreground">Checking total questions for Quick Quiz...</p>
+      </div>
+    );
+  } else if (allMcqsForQuickQuiz && allMcqsForQuickQuiz.length < QUICK_QUIZ_DESIRED_COUNT) {
+    quickQuizTabInternalContent = (
+      <div className="text-center space-y-3 p-4 border border-blue-500/50 bg-blue-100 dark:bg-blue-900/30 rounded-md max-w-md mx-auto">
+        <Info className="h-10 w-10 text-blue-600 dark:text-blue-400 mx-auto" />
+        <p className="font-semibold text-blue-700 dark:text-blue-300">AI Quick Quiz Information</p>
+        <p className="text-sm text-muted-foreground">
+          The AI-powered Quick Quiz selects the best {QUICK_QUIZ_DESIRED_COUNT} questions from your entire question bank.
+          This feature is active when you have {QUICK_QUIZ_DESIRED_COUNT} or more questions.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          You currently have {allMcqsForQuickQuiz.length} questions. Please generate more quizzes to use this feature.
+        </p>
+      </div>
+    );
+  } else if (allMcqsForQuickQuiz) { // Implies length >= QUICK_QUIZ_DESIRED_COUNT
+      if (isGeneratingQuickQuiz) {
+        quickQuizTabInternalContent = (
+            <div className="text-center space-y-3">
+                <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+                <p className="text-muted-foreground">AI is selecting the best questions... This may take a moment.</p>
+            </div>
+        );
+      } else if (quickQuizError) {
+        quickQuizTabInternalContent = (
+            <div className="text-center space-y-3 p-4 border border-destructive/50 bg-destructive/10 rounded-md">
+                <AlertTriangle className="h-10 w-10 text-destructive mx-auto" />
+                <p className="font-semibold">Error Generating Quick Quiz</p>
+                <p className="text-sm text-muted-foreground">{quickQuizError}</p>
+                <Button onClick={handleGenerateQuickQuiz} variant="outline" size="sm">
+                    <RefreshCw className="mr-2 h-4 w-4" /> Try Again
+                </Button>
+            </div>
+        );
+      } else if (quickQuizData) {
+        quickQuizTabInternalContent = (
+            <div className="w-full">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-semibold">{quickQuizData.subject}</h2>
+                    <Button onClick={handleGenerateQuickQuiz} variant="outline" size="sm">
+                        <RefreshCw className="mr-2 h-4 w-4" /> Regenerate
+                    </Button>
+                </div>
+                <QuizInterface quiz={quickQuizData} />
+            </div>
+        );
+      } else {
+        quickQuizTabInternalContent = (
+            <Button onClick={handleGenerateQuickQuiz} size="lg">
+                <Zap className="mr-2 h-5 w-5" /> Generate Quick Quiz
+            </Button>
+        );
+      }
+  } else { // Error fetching allMcqsForQuickQuiz (e.g. it's null)
+     quickQuizTabInternalContent = (
+      <div className="text-center space-y-3 p-4 border border-destructive/50 bg-destructive/10 rounded-md">
+        <AlertTriangle className="h-10 w-10 text-destructive mx-auto" />
+        <p className="font-semibold">Error</p>
+        <p className="text-sm text-muted-foreground">Could not load data for the Quick Quiz feature.</p>
+      </div>
+    );
+  }
+
 
   return (
     <div className="container mx-auto py-8">
@@ -271,44 +371,13 @@ export default function QuizPage() {
         <TabsContent value="quick-quiz">
           <Card>
             <CardHeader>
-              <CardTitle>Comprehensive Quick Quiz</CardTitle>
+              <CardTitle>Comprehensive AI Quick Quiz</CardTitle>
               <CardDescription>
-                A quiz with up to {QUICK_QUIZ_DESIRED_COUNT} of the best questions from all your generated material.
+                A quiz with up to {QUICK_QUIZ_DESIRED_COUNT} of the best questions from all your generated material, selected by AI.
               </CardDescription>
             </CardHeader>
             <CardContent className="min-h-[300px] flex flex-col items-center justify-center">
-              {isGeneratingQuickQuiz && (
-                <div className="text-center space-y-3">
-                  <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-                  <p className="text-muted-foreground">AI is selecting the best questions... This may take a moment.</p>
-                </div>
-              )}
-              {!isGeneratingQuickQuiz && quickQuizError && (
-                <div className="text-center space-y-3 p-4 border border-destructive/50 bg-destructive/10 rounded-md">
-                  <AlertTriangle className="h-10 w-10 text-destructive mx-auto" />
-                  <p className="font-semibold">Error Generating Quick Quiz</p>
-                  <p className="text-sm text-muted-foreground">{quickQuizError}</p>
-                  <Button onClick={handleGenerateQuickQuiz} variant="outline" size="sm">
-                    <RefreshCw className="mr-2 h-4 w-4" /> Try Again
-                  </Button>
-                </div>
-              )}
-              {!isGeneratingQuickQuiz && !quickQuizData && !quickQuizError && (
-                <Button onClick={handleGenerateQuickQuiz} size="lg">
-                  <Zap className="mr-2 h-5 w-5" /> Generate Quick Quiz
-                </Button>
-              )}
-              {!isGeneratingQuickQuiz && quickQuizData && (
-                <div className="w-full">
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-semibold">{quickQuizData.subject}</h2>
-                     <Button onClick={handleGenerateQuickQuiz} variant="outline" size="sm">
-                        <RefreshCw className="mr-2 h-4 w-4" /> Regenerate
-                     </Button>
-                  </div>
-                  <QuizInterface quiz={quickQuizData} />
-                </div>
-              )}
+              {quickQuizTabInternalContent}
             </CardContent>
           </Card>
         </TabsContent>
@@ -317,3 +386,4 @@ export default function QuizPage() {
     </div>
   );
 }
+
