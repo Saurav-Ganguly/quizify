@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { Quiz, QuizAttempt } from '@/lib/types';
-import { FileText, BookOpen, CalendarDays, Percent, Trash2, RotateCcw, Play, Eye } from 'lucide-react';
+import { FileText, BookOpen, CalendarDays, Percent, Trash2, RotateCcw, Play, Eye, StickyNote } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   AlertDialog,
@@ -26,18 +26,24 @@ interface QuizCardProps {
 }
 
 export function QuizCard({ quiz, latestAttempt, onDelete }: QuizCardProps) {
+  const cardTitle = quiz.pdfName || quiz.subject || "Untitled Quiz";
+  const cardDescription = quiz.pdfName ? `Subject: ${quiz.subject}` : `Created ${formatDistanceToNow(new Date(quiz.createdAt), { addSuffix: true })}`;
+
   return (
     <Card className="flex flex-col h-full shadow-lg hover:shadow-xl transition-shadow duration-300">
       <CardHeader>
         <CardTitle className="text-xl flex items-center gap-2">
-          <BookOpen className="w-5 h-5 text-primary" />
-          {quiz.subject}
+          <FileText className="w-5 h-5 text-primary" />
+          {cardTitle}
         </CardTitle>
         <CardDescription className="flex items-center gap-1 text-xs text-muted-foreground">
-          <CalendarDays className="w-3 h-3" />
-          Created {formatDistanceToNow(new Date(quiz.createdAt), { addSuffix: true })}
-          {quiz.pdfName && ` from ${quiz.pdfName.substring(0, 20)}${quiz.pdfName.length > 20 ? '...' : ''}`}
+          <BookOpen className="w-3 h-3" />
+          {cardDescription}
         </CardDescription>
+        <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+            <CalendarDays className="w-3 h-3" />
+            Created {formatDistanceToNow(new Date(quiz.createdAt), { addSuffix: true })}
+        </div>
       </CardHeader>
       <CardContent className="flex-grow space-y-2">
         <div className="flex items-center gap-2 text-sm">
@@ -94,6 +100,3 @@ export function QuizCard({ quiz, latestAttempt, onDelete }: QuizCardProps) {
     </Card>
   );
 }
-
-// Added StickyNote to imports if it wasn't already there
-import { StickyNote } from 'lucide-react';
