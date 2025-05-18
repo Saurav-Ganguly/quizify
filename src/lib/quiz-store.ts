@@ -55,13 +55,23 @@ export const getQuizzes = async (): Promise<Quiz[]> => {
   }
 };
 
+export const getUniqueSubjects = async (): Promise<string[]> => {
+  try {
+    const quizzes = await getQuizzes();
+    const subjects = new Set(quizzes.map(quiz => quiz.subject));
+    return Array.from(subjects).sort();
+  } catch (error) {
+    console.error("Error fetching unique subjects:", error);
+    return [];
+  }
+};
+
 export const getAllMcqsFromAllQuizzes = async (): Promise<Mcq[]> => {
   try {
-    const allQuizzes = await getQuizzes(); // This already fetches all quizzes
+    const allQuizzes = await getQuizzes(); 
     let allMcqs: Mcq[] = [];
     allQuizzes.forEach(quiz => {
       if (quiz.mcqs && quiz.mcqs.length > 0) {
-        // Ensure each MCQ is a plain object without undefined fields for AI processing
         const sanitizedMcqs = quiz.mcqs.map(mcq => ({
           question: mcq.question,
           options: mcq.options,
@@ -110,9 +120,6 @@ export const saveQuiz = async (
     };
     const docRef = await addDoc(collection(db, QUIZZES_COLLECTION), newQuizData);
     
-    // For the returned object, we simulate the serverTimestamp resolution for immediate use.
-    // Firestore typically returns null for serverTimestamp fields on the client immediately after writing.
-    // The actual timestamp is set on the server.
     return {
       id: docRef.id,
       subject,
@@ -120,7 +127,7 @@ export const saveQuiz = async (
       pdfName,
       notes,
       pdfDataUri,
-      createdAt: new Date().toISOString(), // Client-side approximation
+      createdAt: new Date().toISOString(), 
     };
   } catch (error) {
     console.error("Error saving quiz:", error);
@@ -215,10 +222,11 @@ export const saveQuizAttempt = async (
       answers,
       score,
       totalQuestions,
-      completedAt: new Date().toISOString(), // Client-side approximation
+      completedAt: new Date().toISOString(), 
     };
   } catch (error) {
     console.error("Error saving quiz attempt:", error);
     throw error;
   }
 };
+

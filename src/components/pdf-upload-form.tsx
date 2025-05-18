@@ -2,7 +2,7 @@
 "use client";
 
 import type { ChangeEvent } from 'react';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -16,7 +16,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import { saveQuiz } from '@/lib/quiz-store';
+import { saveQuiz, getUniqueSubjects } from '@/lib/quiz-store';
 import { Loader2, UploadCloud, AlertTriangle } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import * as pdfjsLib from 'pdfjs-dist';
@@ -75,9 +75,27 @@ export function PdfUploadForm() {
   const [progress, setProgress] = useState(0);
   const [processingMessage, setProcessingMessage] = useState('');
   const [pageErrors, setPageErrors] = useState<string[]>([]);
+  const [uniqueSubjects, setUniqueSubjects] = useState<string[]>([]);
 
   const router = useRouter();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchSubjects = async () => {
+      try {
+        const subjects = await getUniqueSubjects();
+        setUniqueSubjects(subjects);
+      } catch (error) {
+        console.error("Failed to fetch unique subjects:", error);
+        toast({
+          title: "Warning",
+          description: "Could not load existing subject suggestions.",
+          variant: "default", 
+        });
+      }
+    };
+    fetchSubjects();
+  }, [toast]);
 
   const form = useForm<PdfUploadFormValues>({
     resolver: zodResolver(formSchema),
@@ -114,7 +132,7 @@ export function PdfUploadForm() {
     let pdfDataUri: string | null = null;
 
     try {
-      pdfDataUri = await readFileAsDataURL(pdfFile); // Read PDF as Data URI for storage
+      pdfDataUri = await readFileAsDataURL(pdfFile); 
       const arrayBuffer = await pdfFile.arrayBuffer();
       const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const numPages = pdfDoc.numPages;
@@ -251,8 +269,18 @@ export function PdfUploadForm() {
                 <FormItem>
                   <FormLabel>Subject</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Quantum Physics" {...field} disabled={isProcessing} />
+                    <Input 
+                      placeholder="e.g., Quantum Physics" 
+                      {...field} 
+                      disabled={isProcessing} 
+                      list="subject-suggestions"
+                    />
                   </FormControl>
+                  <datalist id="subject-suggestions">
+                    {uniqueSubjects.map((subject) => (
+                      <option key={subject} value={subject} />
+                    ))}
+                  </datalist>
                   <FormMessage />
                 </FormItem>
               )}
