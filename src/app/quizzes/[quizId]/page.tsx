@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
@@ -243,7 +242,7 @@ export default function QuizPage() {
     quickQuizTabInternalContent = (
       <div className="text-center space-y-3 p-4 border border-blue-500/50 bg-blue-100 dark:bg-blue-900/30 rounded-md max-w-md mx-auto">
         <Info className="h-10 w-10 text-blue-600 dark:text-blue-400 mx-auto" />
-        <p className="font-semibold text-blue-700 dark:text-blue-300">AI Quick Quiz Information</p>
+        <p className="font-semibold text-blue-700 dark:text-blue-300">AI Quick Quiz Feature Not Available</p>
         <p className="text-sm text-muted-foreground">
           The AI-powered Quick Quiz selects the best {QUICK_QUIZ_DESIRED_COUNT} questions from your entire question bank.
           This feature is active when you have {QUICK_QUIZ_DESIRED_COUNT} or more questions.
@@ -301,6 +300,7 @@ export default function QuizPage() {
     );
   }
 
+  const isQuickQuizTabDisabled = !isLoadingAllMcqs && (!allMcqsForQuickQuiz || allMcqsForQuickQuiz.length < QUICK_QUIZ_DESIRED_COUNT);
 
   return (
     <div className="container mx-auto py-8">
@@ -318,7 +318,9 @@ export default function QuizPage() {
           <TabsTrigger value="pdf"><BookOpen className="mr-2 h-4 w-4" />View PDF</TabsTrigger>
           <TabsTrigger value="notes"><StickyNote className="mr-2 h-4 w-4" />Notes</TabsTrigger>
           <TabsTrigger value="quiz"><FileText className="mr-2 h-4 w-4" />Quiz</TabsTrigger>
-          <TabsTrigger value="quick-quiz"><Zap className="mr-2 h-4 w-4" />Quick Quiz</TabsTrigger>
+          <TabsTrigger value="quick-quiz" disabled={isQuickQuizTabDisabled}>
+            <Zap className="mr-2 h-4 w-4" />Quick Quiz
+          </TabsTrigger>
         </TabsList>
         
         <TabsContent value="pdf">
@@ -377,7 +379,19 @@ export default function QuizPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="min-h-[300px] flex flex-col items-center justify-center">
-              {quickQuizTabInternalContent}
+              {isQuickQuizTabDisabled ? (
+                 <div className="text-center space-y-3 p-4 border border-blue-500/50 bg-blue-100 dark:bg-blue-900/30 rounded-md max-w-md mx-auto">
+                    <Info className="h-10 w-10 text-blue-600 dark:text-blue-400 mx-auto" />
+                    <p className="font-semibold text-blue-700 dark:text-blue-300">AI Quick Quiz Feature Not Available</p>
+                    <p className="text-sm text-muted-foreground">
+                      The AI-powered Quick Quiz selects the best {QUICK_QUIZ_DESIRED_COUNT} questions from your entire question bank.
+                      This feature requires {QUICK_QUIZ_DESIRED_COUNT} or more questions in total.
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      You currently have {allMcqsForQuickQuiz?.length || 0} questions. Please generate more quizzes to unlock this feature.
+                    </p>
+                  </div>
+              ) : quickQuizTabInternalContent}
             </CardContent>
           </Card>
         </TabsContent>
@@ -386,4 +400,3 @@ export default function QuizPage() {
     </div>
   );
 }
-
