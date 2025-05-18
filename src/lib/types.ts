@@ -25,3 +25,8 @@ export type QuizAttempt = {
   completedAt: string; // ISO date string
 };
 
+// This type can be used for the AI flow input that just needs MCQs
+export type McqCollection = {
+  mcqs: Mcq[];
+  desiredCount: number;
+};

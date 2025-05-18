@@ -1,18 +1,19 @@
 
 "use client";
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getQuizById, getLatestAttemptForQuiz } from '@/lib/quiz-store';
-import type { Quiz as QuizType, QuizAttempt } from '@/lib/types';
+import { getQuizById, getLatestAttemptForQuiz, getAllMcqsFromAllQuizzes } from '@/lib/quiz-store';
+import type { Quiz as QuizType, QuizAttempt, Mcq } from '@/lib/types';
 import { QuizInterface } from '@/components/quiz-interface';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, BookOpen, FileText, StickyNote } from 'lucide-react';
+import { ArrowLeft, Loader2, BookOpen, FileText, StickyNote, Zap, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { generateBestMcqs } from '@/ai/flows/generate-best-mcqs';
 
 // Helper function to convert markdown-like text to HTML for notes
 const formatNotesToHtml = (text: string | undefined): string => {
@@ -74,6 +75,7 @@ const formatNotesToHtml = (text: string | undefined): string => {
   return htmlOutput;
 };
 
+const QUICK_QUIZ_DESIRED_COUNT = 100;
 
 export default function QuizPage() {
   const router = useRouter();
@@ -84,6 +86,12 @@ export default function QuizPage() {
   const [quiz, setQuiz] = useState<QuizType | null | undefined>(undefined); 
   const [latestAttempt, setLatestAttempt] = useState<QuizAttempt | null | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
+
+  const [quickQuizData, setQuickQuizData] = useState<QuizType | null>(null);
+  const [isGeneratingQuickQuiz, setIsGeneratingQuickQuiz] = useState(false);
+  const [quickQuizError, setQuickQuizError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("pdf");
+
 
   useEffect(() => {
     if (quizId) {
@@ -124,6 +132,51 @@ export default function QuizPage() {
     return '';
   }, [quiz?.notes]);
 
+  const handleGenerateQuickQuiz = useCallback(async () => {
+    setIsGeneratingQuickQuiz(true);
+    setQuickQuizError(null);
+    setQuickQuizData(null);
+    try {
+      const allMcqs = await getAllMcqsFromAllQuizzes();
+      if (allMcqs.length === 0) {
+        setQuickQuizError("No questions available in the database to generate a quick quiz.");
+        setIsGeneratingQuickQuiz(false);
+        return;
+      }
+      
+      toast({ title: "Generating Quick Quiz", description: `AI is selecting the best ${Math.min(allMcqs.length, QUICK_QUIZ_DESIRED_COUNT)} questions... This might take a moment.`});
+
+      const result = await generateBestMcqs({ allMcqs, desiredCount: QUICK_QUIZ_DESIRED_COUNT });
+      
+      if (result.selectedMcqs.length === 0) {
+        setQuickQuizError("AI could not select any questions for the Quick Quiz. Please try again.");
+        setIsGeneratingQuickQuiz(false);
+        return;
+      }
+
+      const comprehensiveQuickQuiz: QuizType = {
+        id: `quick-quiz-${new Date().getTime()}`,
+        subject: 'Comprehensive Quick Quiz',
+        mcqs: result.selectedMcqs,
+        createdAt: new Date().toISOString(),
+      };
+      setQuickQuizData(comprehensiveQuickQuiz);
+      toast({ title: "Quick Quiz Ready!", description: `${result.selectedMcqs.length} questions selected.`});
+
+    } catch (e: any) {
+      console.error("Failed to generate quick quiz:", e);
+      setQuickQuizError(`Failed to generate quick quiz: ${e.message || "An unknown error occurred."}`);
+      toast({
+        title: "Quick Quiz Generation Failed",
+        description: e.message || "Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingQuickQuiz(false);
+    }
+  }, [toast]);
+
+
   if (isLoading || quiz === undefined || (latestAttempt === undefined && quiz !== null) ) {
     return (
       <div className="flex justify-center items-center min-h-[calc(100vh-200px)]">
@@ -160,17 +213,19 @@ export default function QuizPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="pdf" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-6">
+      <Tabs defaultValue="pdf" value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-4 mb-6">
           <TabsTrigger value="pdf"><BookOpen className="mr-2 h-4 w-4" />View PDF</TabsTrigger>
           <TabsTrigger value="notes"><StickyNote className="mr-2 h-4 w-4" />Notes</TabsTrigger>
           <TabsTrigger value="quiz"><FileText className="mr-2 h-4 w-4" />Quiz</TabsTrigger>
+          <TabsTrigger value="quick-quiz"><Zap className="mr-2 h-4 w-4" />Quick Quiz</TabsTrigger>
         </TabsList>
         
         <TabsContent value="pdf">
           <Card>
             <CardHeader>
               <CardTitle>Original PDF Document</CardTitle>
+               {quiz.pdfName && <CardDescription>{quiz.pdfName}</CardDescription>}
             </CardHeader>
             <CardContent>
               {quiz.pdfDataUri ? (
@@ -192,10 +247,11 @@ export default function QuizPage() {
           <Card>
             <CardHeader>
               <CardTitle>Generated Notes</CardTitle>
+              <CardDescription>Exam-focused notes generated from the PDF content.</CardDescription>
             </CardHeader>
             <CardContent>
               {notesHtml && notesHtml.trim() ? (
-                <ScrollArea className="h-[600px] w-full rounded-md border p-4">
+                <ScrollArea className="h-[700px] w-full rounded-md border p-4">
                   <div 
                     className="prose dark:prose-invert max-w-none"
                     dangerouslySetInnerHTML={{ __html: notesHtml }} 
@@ -212,8 +268,52 @@ export default function QuizPage() {
           <QuizInterface quiz={quiz} initialAttempt={latestAttempt === null ? undefined : latestAttempt} />
         </TabsContent>
 
+        <TabsContent value="quick-quiz">
+          <Card>
+            <CardHeader>
+              <CardTitle>Comprehensive Quick Quiz</CardTitle>
+              <CardDescription>
+                A quiz with up to {QUICK_QUIZ_DESIRED_COUNT} of the best questions from all your generated material.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="min-h-[300px] flex flex-col items-center justify-center">
+              {isGeneratingQuickQuiz && (
+                <div className="text-center space-y-3">
+                  <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+                  <p className="text-muted-foreground">AI is selecting the best questions... This may take a moment.</p>
+                </div>
+              )}
+              {!isGeneratingQuickQuiz && quickQuizError && (
+                <div className="text-center space-y-3 p-4 border border-destructive/50 bg-destructive/10 rounded-md">
+                  <AlertTriangle className="h-10 w-10 text-destructive mx-auto" />
+                  <p className="font-semibold">Error Generating Quick Quiz</p>
+                  <p className="text-sm text-muted-foreground">{quickQuizError}</p>
+                  <Button onClick={handleGenerateQuickQuiz} variant="outline" size="sm">
+                    <RefreshCw className="mr-2 h-4 w-4" /> Try Again
+                  </Button>
+                </div>
+              )}
+              {!isGeneratingQuickQuiz && !quickQuizData && !quickQuizError && (
+                <Button onClick={handleGenerateQuickQuiz} size="lg">
+                  <Zap className="mr-2 h-5 w-5" /> Generate Quick Quiz
+                </Button>
+              )}
+              {!isGeneratingQuickQuiz && quickQuizData && (
+                <div className="w-full">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-semibold">{quickQuizData.subject}</h2>
+                     <Button onClick={handleGenerateQuickQuiz} variant="outline" size="sm">
+                        <RefreshCw className="mr-2 h-4 w-4" /> Regenerate
+                     </Button>
+                  </div>
+                  <QuizInterface quiz={quickQuizData} />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
       </Tabs>
     </div>
   );
 }
-

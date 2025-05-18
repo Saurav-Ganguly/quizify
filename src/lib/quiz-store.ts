@@ -55,6 +55,29 @@ export const getQuizzes = async (): Promise<Quiz[]> => {
   }
 };
 
+export const getAllMcqsFromAllQuizzes = async (): Promise<Mcq[]> => {
+  try {
+    const allQuizzes = await getQuizzes(); // This already fetches all quizzes
+    let allMcqs: Mcq[] = [];
+    allQuizzes.forEach(quiz => {
+      if (quiz.mcqs && quiz.mcqs.length > 0) {
+        // Ensure each MCQ is a plain object without undefined fields for AI processing
+        const sanitizedMcqs = quiz.mcqs.map(mcq => ({
+          question: mcq.question,
+          options: mcq.options,
+          correctAnswerIndex: mcq.correctAnswerIndex,
+          explanation: mcq.explanation,
+        }));
+        allMcqs.push(...sanitizedMcqs);
+      }
+    });
+    return allMcqs;
+  } catch (error) {
+    console.error("Error fetching all MCQs from all quizzes:", error);
+    return [];
+  }
+};
+
 export const getQuizById = async (id: string): Promise<Quiz | undefined> => {
   try {
     const quizDocRef = doc(db, QUIZZES_COLLECTION, id);
@@ -87,6 +110,9 @@ export const saveQuiz = async (
     };
     const docRef = await addDoc(collection(db, QUIZZES_COLLECTION), newQuizData);
     
+    // For the returned object, we simulate the serverTimestamp resolution for immediate use.
+    // Firestore typically returns null for serverTimestamp fields on the client immediately after writing.
+    // The actual timestamp is set on the server.
     return {
       id: docRef.id,
       subject,
@@ -94,7 +120,7 @@ export const saveQuiz = async (
       pdfName,
       notes,
       pdfDataUri,
-      createdAt: new Date().toISOString(), 
+      createdAt: new Date().toISOString(), // Client-side approximation
     };
   } catch (error) {
     console.error("Error saving quiz:", error);
@@ -189,11 +215,10 @@ export const saveQuizAttempt = async (
       answers,
       score,
       totalQuestions,
-      completedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(), // Client-side approximation
     };
   } catch (error) {
     console.error("Error saving quiz attempt:", error);
     throw error;
   }
 };
-
